@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from models.omega_layer import OmegaLayer
 from models.VBPLayer import VBPLinear  
 
 
@@ -13,6 +12,8 @@ class DGPLayer(nn.Module):
 
     def forward(self, input_mean, input_var=None):
         # First vb layer (like OmegaLayer in TF)
+        if input_mean.dim() != 2:
+            raise ValueError(f"Expected input_mean with 2 dims (B, in_dim), got shape {input_mean.shape}")
         phi_mean = self.rff_vb(input_mean)
         phi_var = self.rff_vb.var(input_mean, input_var)
 

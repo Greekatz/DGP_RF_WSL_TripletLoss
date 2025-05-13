@@ -3,28 +3,21 @@
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.modules.utils import _pair
 import math
 import numpy as np
 
-
 class VBPLinear(nn.Module):
-    def __init__(self, in_dim, out_dim, prior_prec=10, isoutput=False):
+    def __init__(self, in_features, out_dim, prior_prec=10, isoutput=False):
         super(VBPLinear, self).__init__()
-        self.n_in = in_dim
+        self.n_in = in_features
         self.n_out = out_dim
-
         self.prior_prec = prior_prec
         self.isoutput = isoutput
-
-
         self.bias = nn.Parameter(th.Tensor(out_dim))
-        self.mu_w = nn.Parameter(th.Tensor(out_dim, in_dim))
-        self.logsig2_w = nn.Parameter(th.Tensor(out_dim, in_dim))
+        self.mu_w = nn.Parameter(th.Tensor(out_dim, in_features))
+        self.logsig2_w = nn.Parameter(th.Tensor(out_dim, in_features))
         self.reset_parameters()
-        self.normal = False
-        self.reset_parameters()
-        print(f"VBPLayer(in={in_dim}, out={out_dim})")
+        print(f"VBPLinear(in={in_features}, out={out_dim})")
 
     def reset_parameters(self):
         stdv = 1. / math.sqrt(self.mu_w.size(1))
@@ -46,16 +39,17 @@ class VBPLinear(nn.Module):
         return kl
 
     def var(self, prev_mean, prev_var=None, C=100):
+        if prev_mean.dim() != 2:
+            raise ValueError(f"Expected prev_mean with 2 dims (B, in_features), got shape {prev_mean.shape}")
+        if prev_var is not None and prev_var.shape != prev_mean.shape:
+            raise ValueError(f"prev_var shape {prev_var.shape} must match prev_mean shape {prev_mean.shape}")
         if self.isoutput:
             m2s2_w = self.mu_w.pow(2) + self.logsig2_w.exp()
             term1 = F.linear(prev_var, m2s2_w)
             term2 = F.linear(prev_mean.pow(2), self.logsig2_w.exp())
             return term1 + term2 
-
         else:
             pZ = th.sigmoid(C * F.linear(prev_mean, self.mu_w, self.bias))
-
-            # Compute var[h]
             if prev_var is None:
                 term1 = 0
             else:
@@ -63,17 +57,11 @@ class VBPLinear(nn.Module):
                 term1 = F.linear(prev_var, m2s2_w)
             term2 = F.linear(prev_mean.pow(2), self.logsig2_w.exp())
             varh = term1 + term2 
-
-            # Compute E[h]^2
             term3 = F.linear(prev_mean, self.mu_w, self.bias).pow(2)
-
             return pZ * varh + pZ * (1 - pZ) * term3
 
     def __repr__(self):
-        return self.__class__.__name__ + ' (' \
-               + str(self.n_in) + ' -> ' \
-               + str(self.n_out) \
-               + f', isoutput={self.isoutput})'
+        return self.__class__.__name__ + ' (' + str(self.n_in) + ' -> ' + str(self.n_out) + f', isoutput={self.isoutput})'
 
 
 class VBPConv(VBPLinear):
