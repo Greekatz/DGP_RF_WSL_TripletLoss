@@ -12,16 +12,14 @@ class VBPLinear(nn.Module):
         self.prior_prec = prior_prec
         self.isoutput = isoutput
 
-        # Variational parameters
         self.mu_w = nn.Parameter(torch.Tensor(out_features, in_features))
         self.logsig2_w = nn.Parameter(torch.Tensor(out_features, in_features))
         self.bias = nn.Parameter(torch.Tensor(out_features))
 
-        # Optional scaling factor for ReLU-type layer
-        self.gamma = nn.Parameter(torch.Tensor(out_features)) if isoutput else None
-
+        self.normal = False  # <- must be before reset if reset uses it
         self.reset_parameters()
 
+        
     def reset_parameters(self):
         stdv = 1.0 / math.sqrt(self.in_features)
         self.mu_w.data.normal_(0, stdv)
