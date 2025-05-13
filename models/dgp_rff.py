@@ -10,7 +10,6 @@ class DGP_RFF(nn.Module):
         n_rff=100,
         sigma=1.0,
         prior_prec=10.0,
-        normalize=True
     ):
         """
         Deep Gaussian Process with Random Fourier Features.
@@ -25,7 +24,6 @@ class DGP_RFF(nn.Module):
         super(DGP_RFF, self).__init__()
 
         self.layers = nn.ModuleList()
-        self.normalize = normalize
 
         for i in range(len(fea_dims) - 1):
             self.layers.append(
