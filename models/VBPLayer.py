@@ -24,6 +24,7 @@ class VBPLinear(nn.Module):
         self.reset_parameters()
         self.normal = False
         self.reset_parameters()
+        print(f"VBPLayer(in={in_features}, out={out_features})")
 
     def reset_parameters(self):
         stdv = 1. / math.sqrt(self.mu_w.size(1))
