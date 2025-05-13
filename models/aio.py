@@ -191,7 +191,7 @@ def calculate_lik_prob(muA, muP, muN, varA, varP, varN, margin=0.0):
     varP2 = square(varP)
     varN2 = square(varN)
 
-    mu = reduce_sum(muP2 + varP - muN2 - varN - 2 * multiply(muA, muP - muN), dim=1)
+    mu = reduce_sum(muP2 + varP - muN2 - varN - 2 * multiply(muA, muP - muN), axis=1)
 
     T1 = varP2 + 2 * multiply(muP2, varP) + 2 * multiply(varA + muA2, varP + muP2) \
          - 2 * multiply(muA2, muP2) - 4 * multiply(muA, multiply(muP, varP))
