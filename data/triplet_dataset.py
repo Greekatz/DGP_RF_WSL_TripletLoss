@@ -20,7 +20,7 @@ class TripletDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        row = self.df.iloc[idx]
+        row = self.data[idx]
 
         anchor = self._load_image(row["anchor"])
         positive = self._load_image(row["positive"])
