@@ -9,22 +9,22 @@ import numpy as np
 
 
 class VBPLinear(nn.Module):
-    def __init__(self, in_features, out_features, prior_prec=10, isoutput=False):
+    def __init__(self, in_dim, out_dim, prior_prec=10, isoutput=False):
         super(VBPLinear, self).__init__()
-        self.n_in = in_features
-        self.n_out = out_features
+        self.n_in = in_dim
+        self.n_out = out_dim
 
         self.prior_prec = prior_prec
         self.isoutput = isoutput
 
 
-        self.bias = nn.Parameter(th.Tensor(out_features))
-        self.mu_w = nn.Parameter(th.Tensor(out_features, in_features))
-        self.logsig2_w = nn.Parameter(th.Tensor(out_features, in_features))
+        self.bias = nn.Parameter(th.Tensor(out_dim))
+        self.mu_w = nn.Parameter(th.Tensor(out_dim, in_dim))
+        self.logsig2_w = nn.Parameter(th.Tensor(out_dim, in_dim))
         self.reset_parameters()
         self.normal = False
         self.reset_parameters()
-        print(f"VBPLayer(in={in_features}, out={out_features})")
+        print(f"VBPLayer(in={in_dim}, out={out_dim})")
 
     def reset_parameters(self):
         stdv = 1. / math.sqrt(self.mu_w.size(1))
