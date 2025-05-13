@@ -1,7 +1,8 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
 
 
 class VBPLinear(nn.Module):
@@ -16,6 +17,7 @@ class VBPLinear(nn.Module):
         self.mu_w = nn.Parameter(torch.Tensor(out_features, in_features))
         self.logsig2_w = nn.Parameter(torch.Tensor(out_features, in_features))
         self.bias = nn.Parameter(torch.Tensor(out_features))
+        self.gamma = nn.Parameter(torch.Tensor(out_features)) if not isoutput else None
 
         self.normal = False  # <- must be before reset if reset uses it
         self.reset_parameters()
