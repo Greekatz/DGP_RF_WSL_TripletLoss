@@ -7,8 +7,8 @@ class DGPLayer(nn.Module):
     def __init__(self, in_dim, out_dim, n_rff, sigma=1.0, prior_prec=10.0, is_output=False):
         super(DGPLayer, self).__init__()
 
-        self.rff_vb = VBPLinear(in_features=in_dim, out_features=n_rff, prior_prec=prior_prec, isoutput=True)
-        self.weight_vb = VBPLinear(in_features=n_rff, out_features=out_dim, prior_prec=prior_prec, isoutput=is_output)
+        self.rff_vb = VBPLinear(in_features=int(in_dim), out_features=n_rff, prior_prec=prior_prec, isoutput=True)
+        self.weight_vb = VBPLinear(in_features=int(n_rff), out_features=out_dim, prior_prec=prior_prec, isoutput=is_output)
 
     def forward(self, input_mean, input_var=None):
         # First vb layer (like OmegaLayer in TF)

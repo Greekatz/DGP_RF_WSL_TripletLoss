@@ -7,6 +7,7 @@ import math
 class VBPLinear(nn.Module):
     def __init__(self, in_features, out_features, prior_prec=10.0, isoutput=False):
         super().__init__()
+        print(f"[VBPLinear] in={in_features}, out={out_features}, type(in)={type(in_features)}")
         self.in_features = in_features
         self.out_features = out_features
         self.prior_prec = prior_prec
@@ -19,7 +20,7 @@ class VBPLinear(nn.Module):
         self.normal = False  # <- must be before reset if reset uses it
         self.reset_parameters()
 
-        
+
     def reset_parameters(self):
         stdv = 1.0 / math.sqrt(self.in_features)
         self.mu_w.data.normal_(0, stdv)
