@@ -22,7 +22,6 @@ class VBPLinear(nn.Module):
         self.mu_w = nn.Parameter(th.Tensor(out_features, in_features))
         self.logsig2_w = nn.Parameter(th.Tensor(out_features, in_features))
         self.reset_parameters()
-        print(f"VBPLayer(in={in_dim}, out={out_dim})")
         self.normal = False
         self.reset_parameters()
 
