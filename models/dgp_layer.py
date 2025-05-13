@@ -28,7 +28,7 @@ class DGPLayer(nn.Module):
         super(DGPLayer, self).__init__()
 
         self.omega = OmegaLayer(in_dim, n_rff, sigma=sigma)
-        self.linear = VBPLinear(n_rff, out_dim, prior_prec=prior_prec, isoutput=is_output)
+        self.linear = VBPLinear(in_features=n_rff, out_features=out_dim, prior_prec=prior_prec, isoutput=is_output)
         self.is_output = is_output
 
     def forward(self, input_mean: torch.Tensor, input_var: torch.Tensor = None):
