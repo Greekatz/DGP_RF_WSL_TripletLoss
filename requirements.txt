@@ -1,0 +1,3 @@
+torch
+random-fourier-features-pytorch
+pytest
