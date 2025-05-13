@@ -1,142 +1,114 @@
-#Reference: https://github.com/manuelhaussmann/vbp
-
-import torch as th
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
+from torch.distributions import Normal
 import numpy as np
-
-import torch as th
-import torch.nn as nn
-import torch.nn.functional as F
+import pandas as pd
+from sklearn.metrics import roc_auc_score
 import math
-import numpy as np
+from os import path
+import copy
+import itertools
 
-class VBPLinear(nn.Module):
-    def __init__(self, in_features, out_dim, prior_prec=10, isoutput=False):
-        super(VBPLinear, self).__init__()
-        self.n_in = in_features
-        self.n_out = out_dim
+# Helper functions to replace tf_commands
+def mat_mul(x, y):
+    return torch.matmul(x, y)
+
+def square(x):
+    return torch.square(x)
+
+def exp(x):
+    return torch.exp(x)
+
+def sigmoid(x):
+    return torch.sigmoid(x)
+
+def multiply(x, y):
+    return torch.mul(x, y)
+
+def reduce_sum(x, axis=None):
+    if axis is None:
+        return torch.sum(x)
+    return torch.sum(x, dim=axis)
+
+def log(x):
+    return torch.log(x)
+
+def divide(x, y):
+    return torch.div(x, y)
+
+def vec_rowwise(x):
+    return x.unsqueeze(0)
+
+def vec_colwise(x):
+    return x.unsqueeze(-1)
+
+def vec_flat(x):
+    return x.view(-1)
+
+# Variational Bayesian Layer (equivalent to vb_layer)
+class VBPLayer(nn.Module):
+    def __init__(self, units, dim_input, is_ReLUoutput=False, use_bias=True, prior_prec=1.0):
+        super(VBPLayer, self).__init__()
+        self.units = units
+        self.dim_input = dim_input
+        self.is_ReLUoutput = is_ReLUoutput
+        self.use_bias = use_bias
         self.prior_prec = prior_prec
-        self.isoutput = isoutput
-        self.bias = nn.Parameter(th.Tensor(out_dim))
-        self.mu_w = nn.Parameter(th.Tensor(out_dim, in_features))
-        self.logsig2_w = nn.Parameter(th.Tensor(out_dim, in_features))
+
+        # Initialize weights
+        self.w_mus = nn.Parameter(torch.Tensor(dim_input, units))
+        self.w_logsig2 = nn.Parameter(torch.Tensor(dim_input, units))
+        if use_bias:
+            self.b = nn.Parameter(torch.Tensor(1, units))
+        else:
+            self.b = torch.zeros(1, units)
+
+        if is_ReLUoutput:
+            self.gamma = nn.Parameter(torch.Tensor(1, units))
+        else:
+            self.gamma = None
+
+        # Initialize weights
         self.reset_parameters()
-        # Removed redundant reset_parameters call and unused self.normal
-        print(f"VBPLinear(in={in_features}, out={out_dim})")
 
     def reset_parameters(self):
-        stdv = 1. / math.sqrt(self.mu_w.size(1))
-        self.mu_w.data.normal_(0, stdv)
-        self.logsig2_w.data.zero_().normal_(-9, 0.001)
-        self.bias.data.zero_()
+        nn.init.xavier_normal_(self.w_mus)
+        nn.init.xavier_normal_(self.w_logsig2)
+        if self.use_bias:
+            nn.init.zeros_(self.b)
+        if self.is_ReLUoutput:
+            nn.init.zeros_(self.gamma)
 
-    def forward(self, data):
-        return F.linear(data, self.mu_w, self.bias)
+    def forward(self, in_means, in_vars=None):
+        # Mean computation
+        out_means = mat_mul(in_means, self.w_mus) + self.b
 
-    def KL(self, loguniform=False):
-        if loguniform:
-            k1 = 0.63576; k2 = 1.87320; k3 = 1.48695
-            log_alpha = self.logsig2_w - 2 * th.log(self.mu_w.abs() + 1e-8)
-            kl = -th.sum(k1 * F.sigmoid(k2 + k3 * log_alpha) - 0.5 * F.softplus(-log_alpha) - k1)
+        if not self.is_ReLUoutput:
+            # Variance computation
+            m2s2_w = square(self.w_mus) + exp(self.w_logsig2)
+            term1 = mat_mul(in_vars, m2s2_w) if in_vars is not None else 0
+            term2 = mat_mul(square(in_means), exp(self.w_logsig2))
+            out_vars = term1 + term2
         else:
-            logsig2_w = self.logsig2_w.clamp(-11, 11)
-            kl = 0.5 * (self.prior_prec * (self.mu_w.pow(2) + logsig2_w.exp()) - logsig2_w - 1 - np.log(self.prior_prec)).sum()
+            # ReLU output with scaling
+            pZ = sigmoid(out_means)
+            factor_ = exp(0.5 * self.gamma) * (2 / math.sqrt(self.units))
+            out_means = multiply(multiply(pZ, out_means), factor_)
+
+            # Variance
+            m2s2_w = square(self.w_mus) + exp(self.w_logsig2)
+            term1 = mat_mul(in_vars, m2s2_w) if in_vars is not None else 0
+            term2 = mat_mul(square(in_means), exp(self.w_logsig2))
+            term3 = square(mat_mul(in_means, self.w_mus) + self.b)
+            out_vars = multiply(pZ, term1 + term2) + multiply(multiply(pZ, 1 - pZ), term3)
+            out_vars = multiply(square(factor_), out_vars)
+
+        return out_means, out_vars
+
+    def calculate_kl(self):
+        w_logsig2 = torch.clamp(self.w_logsig2, -11, 11)
+        kl = 0.5 * reduce_sum(
+            multiply(self.prior_prec, square(self.w_mus) + exp(w_logsig2)) - w_logsig2 - math.log(self.prior_prec)
+        )
         return kl
-
-    def var(self, prev_mean, prev_var=None, C=100):
-        if prev_mean.dim() != 2:
-            raise ValueError(f"Expected prev_mean with 2 dims (B, in_features), got shape {prev_mean.shape}")
-        if prev_var is not None and prev_var.shape != prev_mean.shape:
-            raise ValueError(f"prev_var shape {prev_var.shape} must match prev_mean shape {prev_mean.shape}")
-        if self.isoutput:
-            m2s2_w = self.mu_w.pow(2) + self.logsig2_w.exp()
-            term1 = F.linear(prev_var, m2s2_w)
-            term2 = F.linear(prev_mean.pow(2), self.logsig2_w.exp())
-            return term1 + term2 
-        else:
-            pZ = th.sigmoid(C * F.linear(prev_mean, self.mu_w, self.bias))
-            if prev_var is None:
-                term1 = 0
-            else:
-                m2s2_w = self.mu_w.pow(2) + self.logsig2_w.exp()
-                term1 = F.linear(prev_var, m2s2_w)
-            term2 = F.linear(prev_mean.pow(2), self.logsig2_w.exp())
-            varh = term1 + term2 
-            term3 = F.linear(prev_mean, self.mu_w, self.bias).pow(2)
-            return pZ * varh + pZ * (1 - pZ) * term3
-
-    def __repr__(self):
-        return self.__class__.__name__ + ' (' + str(self.n_in) + ' -> ' + str(self.n_out) + f', isoutput={self.isoutput})'
-class VBPConv(VBPLinear):
-    def __init__(self, in_channels, out_channels, kernel_size, prior_prec=10, stride=1,
-                 padding=0, dilation=1, groups=1, isoutput=False):
-        super(VBPLinear, self).__init__()
-        self.n_in = in_channels
-        self.n_out = out_channels
-
-        self.kernel_size = kernel_size
-        self.stride = _pair(stride)
-        self.padding = _pair(padding)
-        self.dilation = _pair(dilation)
-        self.groups = groups
-
-        self.prior_prec = prior_prec
-        self.isoutput = isoutput
-
-        self.bias = nn.Parameter(th.Tensor(out_channels))
-        self.mu_w = nn.Parameter(th.Tensor(out_channels, in_channels, kernel_size, kernel_size))
-        self.logsig2_w = nn.Parameter(th.Tensor(out_channels, in_channels, kernel_size, kernel_size))
-        self.reset_parameters()
-
-
-    def reset_parameters(self):
-        n = self.n_in
-        for k in range(1, self.kernel_size):
-            n *= k
-        self.mu_w.data.normal_(0, 1. / math.sqrt(n))
-        self.logsig2_w.data.zero_().normal_(-9, 0.001)
-        self.bias.data.zero_()
-
-    def forward(self, data):
-        return F.conv2d(data, self.mu_w, self.bias, self.stride, self.padding, self.dilation, self.groups)
-
-    def var(self, prev_mean, prev_var=None, C=100):
-        if self.isoutput:
-            m2s2_w = self.mu_w.pow(2) + self.logsig2_w.exp()
-            term1 = F.conv2d(prev_var, m2s2_w, None, self.stride, self.padding, self.dilation, self.groups)
-            term2 = F.conv2d(prev_mean.pow(2), self.logsig2_w.exp(), None, self.stride, self.padding, self.dilation, self.groups)
-            return term1 + term2 
-
-        else:
-            pZ = th.sigmoid(C*F.conv2d(prev_mean, self.mu_w, self.bias, self.stride, self.padding, self.dilation, self.groups))
-
-            # Compute var[h]
-            if prev_var is None:
-                term1 = 0
-            else:
-                m2s2_w = self.mu_w.pow(2) + self.logsig2_w.exp()
-                term1 = F.conv2d(prev_var, m2s2_w, None, self.stride, self.padding, self.dilation, self.groups)
-            term2 = F.conv2d(prev_mean.pow(2), self.logsig2_w.exp(), None, self.stride, self.padding, self.dilation, self.groups)
-            varh = term1 + term2 
-
-
-            # Compute E[h]^2
-            term3 = F.conv2d(prev_mean, self.mu_w, self.bias, self.stride, self.padding, self.dilation, self.groups).pow(2)
-
-            return pZ * varh + pZ * (1 - pZ) * term3
-
-    def __repr__(self):
-        s = ('{name}({n_in}, {n_out}, kernel_size={kernel_size}'
-             ', stride={stride}')
-        if self.padding != (0,) * len(self.padding):
-            s += ', padding={padding}'
-        if self.dilation != (1,) * len(self.dilation):
-            s += ', dilation={dilation}'
-        if self.groups != 1:
-            s += ', groups={groups}'
-        s += ', bias=True'
-        s += ')'
-
-        return s.format(name=self.__class__.__name__, **self.__dict__)
