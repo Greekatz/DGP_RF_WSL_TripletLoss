@@ -5,58 +5,22 @@ from models.VBPLayer import VBPLinear
 
 
 class DGPLayer(nn.Module):
-    def __init__(
-        self,
-        in_dim: int,
-        out_dim: int,
-        n_rff: int,
-        sigma: float = 1.0,
-        prior_prec: float = 10.0,
-        is_output: bool = False
-    ):
-        """
-        One layer of a DGP with Random Fourier Features and Variational Bayesian Projection.
-
-        Args:
-            in_dim (int): Input feature dimension.
-            out_dim (int): Output feature dimension.
-            n_rff (int): Number of random Fourier features.
-            sigma (float): Length scale for the RBF kernel.
-            prior_prec (float): Prior precision for KL divergence.
-            is_output (bool): Whether this is the final output layer.
-        """
+    def __init__(self, in_dim, out_dim, n_rff, sigma=1.0, prior_prec=10.0, is_output=False):
         super(DGPLayer, self).__init__()
 
-        self.omega = OmegaLayer(in_dim, n_rff, sigma=sigma)
-        self.linear = VBPLinear(in_features=n_rff, out_features=out_dim, prior_prec=prior_prec, isoutput=is_output)
-        self.is_output = is_output
+        self.rff_vb = VBPLinear(in_features=in_dim, out_features=n_rff, prior_prec=prior_prec, isoutput=True)
+        self.weight_vb = VBPLinear(in_features=n_rff, out_features=out_dim, prior_prec=prior_prec, isoutput=is_output)
 
-    def forward(self, input_mean: torch.Tensor, input_var: torch.Tensor = None):
-        """
-        Forward pass with variance propagation.
+    def forward(self, input_mean, input_var=None):
+        # First vb layer (like OmegaLayer in TF)
+        phi_mean = self.rff_vb(input_mean)
+        phi_var = self.rff_vb.var(input_mean, input_var)
 
-        Args:
-            input_mean (Tensor): shape (B, in_dim), mean of the input.
-            input_var (Tensor): shape (B, in_dim), optional variance of the input.
-
-        Returns:
-            output_mean (Tensor): shape (B, out_dim)
-            output_var (Tensor): shape (B, out_dim)
-        """
-        # Apply RFF transformation
-        phi_mean = self.omega(input_mean)
-
-        # Propagate through variational linear layer
-        output_mean = self.linear(phi_mean)
-        output_var = self.linear.var(phi_mean, input_var)
+        # Then projection layer
+        output_mean = self.weight_vb(phi_mean)
+        output_var = self.weight_vb.var(phi_mean, phi_var)
 
         return output_mean, output_var
 
-    def calculate_kl(self) -> torch.Tensor:
-        """
-        Compute KL divergence for this layer's weight posterior.
-
-        Returns:
-            kl (Tensor): KL divergence scalar
-        """
-        return self.linear.KL()
+    def calculate_kl(self):
+        return self.rff_vb.KL() + self.weight_vb.KL()
