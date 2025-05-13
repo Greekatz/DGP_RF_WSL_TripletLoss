@@ -6,6 +6,12 @@ import torch.nn.functional as F
 import math
 import numpy as np
 
+import torch as th
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+import numpy as np
+
 class VBPLinear(nn.Module):
     def __init__(self, in_features, out_dim, prior_prec=10, isoutput=False):
         super(VBPLinear, self).__init__()
@@ -17,6 +23,7 @@ class VBPLinear(nn.Module):
         self.mu_w = nn.Parameter(th.Tensor(out_dim, in_features))
         self.logsig2_w = nn.Parameter(th.Tensor(out_dim, in_features))
         self.reset_parameters()
+        # Removed redundant reset_parameters call and unused self.normal
         print(f"VBPLinear(in={in_features}, out={out_dim})")
 
     def reset_parameters(self):
@@ -62,8 +69,6 @@ class VBPLinear(nn.Module):
 
     def __repr__(self):
         return self.__class__.__name__ + ' (' + str(self.n_in) + ' -> ' + str(self.n_out) + f', isoutput={self.isoutput})'
-
-
 class VBPConv(VBPLinear):
     def __init__(self, in_channels, out_channels, kernel_size, prior_prec=10, stride=1,
                  padding=0, dilation=1, groups=1, isoutput=False):
