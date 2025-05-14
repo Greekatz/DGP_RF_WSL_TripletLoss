@@ -167,7 +167,7 @@ class DGP_RF:
                 scores = -np.linalg.norm(out_means[mask], axis=1)
 
                 try:
-                    auc_val = roc_auc_score(y_true, scores)
+                    auc_val = roc_auc_score(y_true, scores,multi_class="ovr")
                     print(f"  Final Train AUC = {auc_val:.4f}")
                 except ValueError as e:
                     print("AUC Error:", e)
