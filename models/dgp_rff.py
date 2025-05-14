@@ -157,18 +157,4 @@ class DGP_RF:
             avg_obj = total_obj / iters_Pos
             print(f"Epoch {epoch + 1}/{self.max_iter} - Loss: {avg_obj:.4f}")
 
-            if self.iter_print and (epoch == self.max_iter - 1):
-                out_means, _ = self.predict(self.trn_index, sub_Ni=self.sub_Ni, rep_num=1, flag_trndata=True)
-
-                # Mask out anchors
-                mask = self.Ytrn != -1
-                y_raw = self.Ytrn[mask]
-                y_true = (y_raw == 1).astype(int)
-                scores = -np.linalg.norm(out_means[mask], axis=1)
-
-                try:
-                    auc_val = roc_auc_score(y_true, scores, multi_class="ovo")
-                    print(f"  Final Train AUC = {auc_val:.4f}")
-                except ValueError as e:
-                    print("AUC Error:", e)
-
+    
