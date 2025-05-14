@@ -1,80 +1,74 @@
-import math
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 
-class VBPLinear(nn.Module):
-    def __init__(self, in_features, out_features, prior_prec=10.0, isoutput=False):
-        super().__init__()
-        print(f"[VBPLinear] in={in_features}, out={out_features}, type(in)={type(in_features)}")
-        self.in_features = in_features
-        self.out_features = out_features
+class VBLayer(nn.Module):
+    def __init__(self, units, dim_input, is_ReLUoutput=False,
+                 use_bias=True,
+                 kernel_initializer=torch.nn.init.xavier_normal_,
+                 bias_initializer=torch.nn.init.zeros_,
+                 prior_prec=1.0):
+        super(VBLayer, self).__init__()
+        self.units = units
+        self.d_input = dim_input
+        self.is_ReLUoutput = is_ReLUoutput
+        self.use_bias = use_bias
         self.prior_prec = prior_prec
-        self.isoutput = isoutput
 
-        self.mu_w = nn.Parameter(torch.Tensor(out_features, in_features))
-        self.logsig2_w = nn.Parameter(torch.Tensor(out_features, in_features))
-        self.bias = nn.Parameter(torch.Tensor(out_features))
-        self.gamma = nn.Parameter(torch.Tensor(out_features)) if not isoutput else None
+        # Weight means and log variances
+        self.w_mus = nn.Parameter(torch.empty(dim_input, units))
+        self.w_logsig2 = nn.Parameter(torch.empty(dim_input, units))
 
-        self.normal = False  # <- must be before reset if reset uses it
-        self.reset_parameters()
+        # Bias term
+        self.b = nn.Parameter(torch.empty(1, units)) if use_bias else None
 
+        # Gamma for ARD in ReLU output
+        if is_ReLUoutput:
+            self.gamma = nn.Parameter(torch.empty(1, units))
 
-    def reset_parameters(self):
-        stdv = 1.0 / math.sqrt(self.in_features)
-        self.mu_w.data.normal_(0, stdv)
-        self.logsig2_w.data.normal_(-9, 0.001)
-        self.bias.data.zero_()
-        if self.gamma is not None:
-            self.gamma.data.zero_()
+        # Initialize weights
+        kernel_initializer(self.w_mus)
+        kernel_initializer(self.w_logsig2)
+        if use_bias:
+            bias_initializer(self.b)
+        if is_ReLUoutput:
+            bias_initializer(self.gamma)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return F.linear(x, self.mu_w, self.bias)
+    def forward(self, in_means, in_vars=None):
+        out_means = torch.matmul(in_means, self.w_mus)
+        if self.use_bias:
+            out_means += self.b
 
-    def var(self, mean: torch.Tensor, var: torch.Tensor = None, C=100) -> torch.Tensor:
-        if self.isoutput:
-            # Output layer variance
-            m2s2_w = self.mu_w**2 + self.logsig2_w.exp()
-            term1 = F.linear(var, m2s2_w) if var is not None else 0
-            term2 = F.linear(mean**2, self.logsig2_w.exp())
-            return term1 + term2
+        if not self.is_ReLUoutput:
+            m2s2_w = self.w_mus.pow(2) + torch.exp(self.w_logsig2)
+            term1 = torch.matmul(in_vars, m2s2_w) if in_vars is not None else 0
+            term2 = torch.matmul(in_means.pow(2), torch.exp(self.w_logsig2))
+            out_vars = term1 + term2
         else:
-            # Hidden layer: ReLU-like nonlinear propagation
-            logits = F.linear(mean, self.mu_w, self.bias)  # shape (B, out_features)
-            pZ = torch.sigmoid(C * logits)
+            pZ = torch.sigmoid(out_means)
+            factor = torch.exp(0.5 * self.gamma) * (2 / math.sqrt(self.units))
+            out_means = pZ * out_means * factor
 
-            m2s2_w = self.mu_w**2 + self.logsig2_w.exp()
-            term1 = F.linear(var, m2s2_w) if var is not None else 0
-            term2 = F.linear(mean**2, self.logsig2_w.exp())
-            varh = term1 + term2
+            if in_vars is not None:
+                m2s2_w = self.w_mus.pow(2) + torch.exp(self.w_logsig2)
+                term1 = torch.matmul(in_vars, m2s2_w)
+            else:
+                term1 = 0
 
-            mean_sq = F.linear(mean, self.mu_w, self.bias)**2
-            return pZ * varh + pZ * (1 - pZ) * mean_sq
+            term2 = torch.matmul(in_means.pow(2), torch.exp(self.w_logsig2))
+            term3 = (torch.matmul(in_means, self.w_mus) + self.b).pow(2)
 
-    def KL(self, loguniform=False):
-        if loguniform:
-            # Optional alternative KL using log-uniform prior (used in VBP repo)
-            k1 = 0.63576
-            k2 = 1.87320
-            k3 = 1.48695
-            log_alpha = self.logsig2_w - 2 * torch.log(torch.abs(self.mu_w) + 1e-8)
-            kl = -torch.sum(
-                k1 * torch.sigmoid(k2 + k3 * log_alpha)
-                - 0.5 * F.softplus(-log_alpha)
-                - k1
-            )
-        else:
-            logsig2 = torch.clamp(self.logsig2_w, -11, 11)
-            kl = 0.5 * torch.sum(
-                self.prior_prec * (self.mu_w**2 + logsig2.exp())
-                - logsig2
-                - 1
-                - math.log(self.prior_prec)
-            )
+            out_vars = pZ * (term1 + term2) + pZ * (1 - pZ) * term3
+            out_vars = out_vars * factor.pow(2)
+
+        return out_means, out_vars
+
+    def calculate_kl(self):
+        w_logsig2_clipped = torch.clamp(self.w_logsig2, min=-11.0, max=11.0)
+        kl = 0.5 * torch.sum(
+            self.prior_prec * (self.w_mus.pow(2) + torch.exp(w_logsig2_clipped)) -
+            w_logsig2_clipped - torch.log(torch.tensor(self.prior_prec))
+        )
         return kl
-
-    def __repr__(self):
-        return f"VBPLinear({self.in_features} → {self.out_features}, output={self.isoutput})"
