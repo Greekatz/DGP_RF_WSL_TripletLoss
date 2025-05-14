@@ -65,6 +65,40 @@ class DGP_RF:
         self.optimizer.step()
 
         return obj.item()
+    
+    def mark_subImgs(self, data_X, index_vec, sub_Ni=1, rep_num=1, flag_AllIns=False):
+        # Randomly selects `sub_Ni` sub-instances per instance (unless flag_AllIns=True)
+        Nis = np.hstack([data_X.Nis[idx] for idx in index_vec])
+        set_indices = []
+
+        for _ in range(rep_num):
+            set_indices_sub = []
+            for Ni in Nis:
+                if not flag_AllIns:
+                    selected = np.sort(np.random.choice(np.arange(Ni), size=min(Ni, sub_Ni), replace=False))
+                else:
+                    selected = np.arange(Ni)
+                set_indices_sub.append(selected)
+            set_indices.append(set_indices_sub)
+
+        return set_indices
+    
+    def gen_input_fromList(self, data_X, index_vec, set_indices):
+        X = []
+        X_idx = []
+        offset = 0
+
+        for i, idx in enumerate(index_vec):
+            instance = data_X.data_mat[idx]
+            selected_rows = set_indices[i]
+            X.append(instance[selected_rows])
+            X_idx.extend([i] * len(selected_rows))
+
+        X = np.vstack(X)
+        X_idx = np.array(X_idx)
+        return X, X_idx
+
+
 
     def model_fit(self):
         iters_Pos = len(self.pos_idx)
