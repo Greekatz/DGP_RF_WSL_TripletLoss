@@ -90,6 +90,35 @@ class DGP_RF:
         X = np.vstack(X)
         X_idx = np.array(X_idx)
         return X, X_idx
+    
+    def predict(self, tst_index, sub_Ni=None, rep_num=1, flag_trndata=False):
+        if sub_Ni is None:
+            sub_Ni = self.sub_Ni
+
+        if flag_trndata:
+            data_set_ = self.data_X
+        else:
+            raise NotImplementedError("Non-training data prediction is not yet implemented")
+
+        means_all, vars_all = [], []
+
+        for idx in tst_index:
+            set_indices = self.mark_subImgs(data_set_, [idx], sub_Ni=sub_Ni, rep_num=rep_num)[0]
+            X, X_idx = self.gen_input_fromList(data_set_, [idx], set_indices)
+
+            with torch.no_grad():
+                X = torch.tensor(X, dtype=torch.float32).cuda()
+                X_idx = torch.tensor(X_idx, dtype=torch.long).cuda()
+                mean, var = self.model(X, X_idx)
+
+            means_all.append(mean.cpu())
+            vars_all.append(var.cpu())
+
+        means_all = torch.cat(means_all, dim=0)
+        vars_all = torch.cat(vars_all, dim=0)
+
+        return means_all.numpy(), vars_all.numpy()
+
 
 
 
