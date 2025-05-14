@@ -6,6 +6,8 @@ import os
 
 from torch_scatter import scatter_sum
 from tqdm import trange
+from sklearn.metrics import roc_auc_score
+
 from models.dgp_embeddings import DGP_RF_Embeddings
 from losses.triplet_loss import ProbabilisticTripletLoss
 
@@ -63,7 +65,6 @@ class DGP_RF:
         self.optimizer.step()
 
         return obj.item()
-
 
     def model_fit(self):
         iters_Pos = len(self.pos_idx)
