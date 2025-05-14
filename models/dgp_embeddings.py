@@ -4,6 +4,8 @@ import torch.nn.functional as F
 from torch.distributions.normal import Normal
 from torch_scatter import scatter_sum
 
+from models.VBPLayer import VBLayer
+
 class DGP_RF_Embeddings(nn.Module):
     def __init__(self, fea_dims, num_RF):
         super(DGP_RF_Embeddings, self).__init__()

@@ -4,6 +4,9 @@ from torch.optim import Adam
 import numpy as np
 import os
 
+from dgp_embeddings import DGP_RF_Embeddings
+from losses.triplet_loss import ProbabilisticTripletLoss
+
 class DGP_RF:
     def __init__(self, data_X, data_Y, trn_index, setting, str_filepath=None):
         N_pos = np.sum(data_Y[trn_index] == 1)
@@ -50,7 +53,7 @@ class DGP_RF:
         self.optimizer.zero_grad()
 
         est_means, est_vars = self.model(X, X_idx)
-        loss = prob_triplet_loss(Y, est_means, est_vars, self.NpNm, self.alpha)
+        loss = ProbabilisticTripletLoss(Y, est_means, est_vars, self.NpNm, self.alpha)
         reg_ = self.model.cal_regul()
         obj = loss + regul_const * reg_
 
