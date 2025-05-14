@@ -24,6 +24,7 @@ class DGP_RF:
         self.n_RF = setting.n_RF
         self.regul_const = float(setting.regul_const)
         self.alpha = setting.alpha
+        
 
         fea_dims_sub = [100] * setting.n_layers
         fea_dims = [data_X.data_mat[0].shape[1]] + fea_dims_sub
@@ -37,16 +38,8 @@ class DGP_RF:
 
         self.model = DGP_RF_Embeddings(fea_dims, self.n_RF).cuda()
         self.optimizer = Adam(self.model.parameters(), lr=0.001)
+        self.loss_fn = ProbabilisticTripletLoss(alpha=self.alpha)
 
-        if str_filepath is None:
-            self.model_fit()
-        else:
-            if os.path.exists(str_filepath + '.pt'):
-                self.model.load_state_dict(torch.load(str_filepath + '.pt'))
-                print(f"Loaded trained model from {str_filepath}")
-            else:
-                self.model_fit()
-                torch.save(self.model.state_dict(), str_filepath + '.pt')
 
     def run_optimization(self, X_np, X_idx_np, Y_np, regul_const=1e-2):
         X = torch.tensor(X_np, dtype=torch.float32).cuda()
@@ -57,7 +50,7 @@ class DGP_RF:
         self.optimizer.zero_grad()
 
         est_means, est_vars = self.model(X, X_idx)
-        loss = ProbabilisticTripletLoss(Y, est_means, est_vars, self.NpNm, self.alpha)
+        loss = self.loss_fn(Y, est_means, est_vars, self.NpNm, self.alpha)
         reg_ = self.model.cal_regul()
         obj = loss + regul_const * reg_
 
