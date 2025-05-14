@@ -161,8 +161,11 @@ class DGP_RF:
 
             if self.iter_print and (epoch == self.max_iter - 1):
                 out_means, _ = self.predict(self.trn_index, sub_Ni=self.sub_Ni, rep_num=1, flag_trndata=True)
-                print("Unique labels:", np.unique(self.Ytrn[mask]))
+                
                 mask = self.Ytrn != -1
-                auc_val = roc_auc_score(self.Ytrn[mask], -np.linalg.norm(out_means[mask], axis=1))
+                y_true = np.where(self.Ytrn[mask] > 0, 1, 0)
+                scores = -np.linalg.norm(out_means[mask], axis=1)
+                auc_val = roc_auc_score(y_true, scores)
+
 
                 print(f"  Train AUC = {auc_val:.4f}")
