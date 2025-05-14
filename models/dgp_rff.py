@@ -6,7 +6,6 @@ import os
 
 from torch_scatter import scatter_sum
 from tqdm import trange
-from sklearn.metrics import roc_auc_score
 
 from models.dgp_embeddings import DGP_RF_Embeddings
 from losses.triplet_loss import ProbabilisticTripletLoss
@@ -120,7 +119,7 @@ class DGP_RF:
         return means_all.numpy(), vars_all.numpy()
 
 
-    def model_fit(self):
+    def model_fit(self, save_path=None):
         iters_Pos = len(self.pos_idx)
         n_pos = int(max(round(self.batch_size / 2), 1))
         n_neg = n_pos  # Can be tuned
@@ -157,4 +156,6 @@ class DGP_RF:
             avg_obj = total_obj / iters_Pos
             print(f"Epoch {epoch + 1}/{self.max_iter} - Loss: {avg_obj:.4f}")
 
-    
+        if save_path:
+            torch.save(self.model.state_dict(), save_path)
+            print(f"Model saved to {save_path}")
