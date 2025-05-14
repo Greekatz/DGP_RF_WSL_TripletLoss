@@ -4,8 +4,6 @@ from torch.optim import Adam
 import numpy as np
 import os
 
-from torch_scatter import scatter_sum
-from tqdm import trange
 
 from models.dgp_embeddings import DGP_RF_Embeddings
 from losses.triplet_loss import ProbabilisticTripletLoss
@@ -159,3 +157,6 @@ class DGP_RF:
         if save_path:
             torch.save(self.model.state_dict(), save_path)
             print(f"Model saved to {save_path}")
+
+
+    
