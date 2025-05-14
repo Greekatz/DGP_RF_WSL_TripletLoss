@@ -161,19 +161,27 @@ class DGP_RF:
 
             if self.iter_print and (epoch == self.max_iter - 1):
                 out_means, _ = self.predict(self.trn_index, sub_Ni=self.sub_Ni, rep_num=1, flag_trndata=True)
-                
+
+                # Mask out anchors (label = -1)
                 mask = self.Ytrn != -1
                 y_raw = self.Ytrn[mask]
 
+                # Ensure binary labels: only 0 and 1
+                y_true = (y_raw == 1).astype(int)
+                print("y_true shape:", y_true.shape)
+                print("Unique y_true values:", np.unique(y_true))  # Should print: [0 1]
 
-                y_true = np.array(y_raw == 1, dtype=int)  
-                print("Unique y_true:", np.unique(y_true))  # Should print: [0 1]
-
-                # Get scores
+                # Compute 1D scores (use -L2 norm as distance-based score)
                 scores = -np.linalg.norm(out_means[mask], axis=1)
 
-                # ✅ Compute AUC safely
-                auc_val = roc_auc_score(y_true, scores)
-                print(f"  Train AUC = {auc_val:.4f}")
+                print("scores shape:", scores.shape)
 
-            
+                try:
+                    auc_val = roc_auc_score(y_true, scores)
+                    print(f"  Train AUC = {auc_val:.4f}")
+                except ValueError as e:
+                    print("ROC AUC error:", e)
+                    print("Skipping AUC due to label issue.")
+
+
+                        
