@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
-from torch_scatter import scatter_sum
+
 
 from models.VBPLayer import VBLayer
 
