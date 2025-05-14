@@ -120,15 +120,13 @@ class DGP_RF:
         return means_all.numpy(), vars_all.numpy()
 
 
-
-
     def model_fit(self):
         iters_Pos = len(self.pos_idx)
         n_pos = int(max(round(self.batch_size / 2), 1))
-        n_neg = n_pos
+        n_neg = n_pos  # Can be tuned
 
         for epoch in trange(self.max_iter, desc="Training Epochs"):
-            eta = 1.0 if epoch < 10 else 1.0
+            eta = 1.0  # can implement schedule later
             total_obj = 0.0
 
             for i in range(iters_Pos):
@@ -149,10 +147,10 @@ class DGP_RF:
 
                 index_vec = np.concatenate((pos_idx, neg_idx))
                 set_indices = self.mark_subImgs(self.data_X, index_vec, sub_Ni=self.sub_Ni)
-
                 X, X_idx = self.gen_input_fromList(self.data_X, index_vec, set_indices[0])
+
                 Y = self.Y[index_vec]
-                Y[0] = -1
+                Y[0] = -1  # anchor
 
                 total_obj += self.run_optimization(X, X_idx, Y, eta * self.regul_const)
 
@@ -162,26 +160,15 @@ class DGP_RF:
             if self.iter_print and (epoch == self.max_iter - 1):
                 out_means, _ = self.predict(self.trn_index, sub_Ni=self.sub_Ni, rep_num=1, flag_trndata=True)
 
-                # Mask out anchors (label = -1)
+                # Mask out anchors
                 mask = self.Ytrn != -1
                 y_raw = self.Ytrn[mask]
-
-                # Ensure binary labels: only 0 and 1
                 y_true = (y_raw == 1).astype(int)
-                print("y_true shape:", y_true.shape)
-                print("Unique y_true values:", np.unique(y_true))  # Should print: [0 1]
-
-                # Compute 1D scores (use -L2 norm as distance-based score)
                 scores = -np.linalg.norm(out_means[mask], axis=1)
-
-                print("scores shape:", scores.shape)
 
                 try:
                     auc_val = roc_auc_score(y_true, scores)
-                    print(f"  Train AUC = {auc_val:.4f}")
+                    print(f"  Final Train AUC = {auc_val:.4f}")
                 except ValueError as e:
-                    print("ROC AUC error:", e)
-                    print("Skipping AUC due to label issue.")
+                    print("AUC Error:", e)
 
-
-                        
