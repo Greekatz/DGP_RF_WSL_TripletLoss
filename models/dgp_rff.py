@@ -161,5 +161,5 @@ class DGP_RF:
 
             if self.iter_print and (epoch == self.max_iter - 1):
                 out_means, _ = self.predict(self.trn_index, sub_Ni=self.sub_Ni, rep_num=1, flag_trndata=True)
-                auc_val = roc_auc_score(self.Ytrn, out_means)
+                auc_val = roc_auc_score(self.Ytrn, -np.linalg.norm(out_means, axis=1))
                 print(f"  Train AUC = {auc_val:.4f}")
