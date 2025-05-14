@@ -4,7 +4,7 @@ from torch.optim import Adam
 import numpy as np
 import os
 
-from dgp_embeddings import DGP_RF_Embeddings
+from models.dgp_embeddings import DGP_RF_Embeddings
 from losses.triplet_loss import ProbabilisticTripletLoss
 
 class DGP_RF:
