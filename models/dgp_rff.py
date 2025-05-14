@@ -50,7 +50,7 @@ class DGP_RF:
         self.optimizer.zero_grad()
 
         est_means, est_vars = self.model(X, X_idx)
-        loss = self.loss_fn(Y, est_means, est_vars, self.NpNm, self.alpha)
+        loss = self.loss_fn(Y, est_means, est_vars, self.NpNm)
         reg_ = self.model.cal_regul()
         obj = loss + regul_const * reg_
 
