@@ -12,6 +12,8 @@ class DGP_RF_Embeddings(nn.Module):
 
     def forward(self, X, X_idx):
         inter_means, inter_vars = X, None
+        print("inter_means.shape:", inter_means.shape)
+        print("X_idx.shape:", X_idx.shape)
 
         for layer in self.layers:
             inter_means, inter_vars = layer(inter_means, inter_vars)
