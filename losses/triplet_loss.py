@@ -1,55 +1,58 @@
 import torch
 import torch.nn as nn
-from torch.distributions import Normal
+from torch.distributions.normal import Normal
 
 class ProbabilisticTripletLoss(nn.Module):
-    def __init__(self, alpha=1.0, margin=1e-4):
+    def __init__(self, alpha=0.5, margin=0.0, eps=1e-8):
         super().__init__()
         self.alpha = alpha
         self.margin = margin
+        self.eps = eps
 
     def forward(self, y_true, est_means, est_vars, NmulPnN):
-        """
-        y_true: [B] tensor with values [-1, 1, 0] (anchor, pos, neg)
-        est_means: [B, D] mean embeddings
-        est_vars: [B, D] variance embeddings
-        NmulPnN: Normalization constant (float)
-        """
-        device = est_means.device
-        idx_anchor = (y_true == -1)
-        idx_pos = (y_true == 1)
-        idx_neg = (y_true == 0)
+        idx_pos = (y_true == 1).nonzero(as_tuple=False).squeeze()
+        idx_neg = (y_true == 0).nonzero(as_tuple=False).squeeze()
 
-        if idx_pos.sum() == 0 or idx_neg.sum() == 0:
-            return torch.tensor(0.0, device=device)
+        if idx_pos.numel() == 0 or idx_neg.numel() == 0:
+            return torch.tensor(0.0, device=est_means.device)
 
-        # Anchor is assumed to be single (or first sample)
-        muA = est_means[idx_anchor].squeeze(0)  # [D]
-        varA = est_vars[idx_anchor].squeeze(0)  # [D]
+        n_pos = idx_pos.numel()
+        n_neg = idx_neg.numel()
 
-        muP = est_means[idx_pos]  # [Np, D]
-        varP = est_vars[idx_pos]  # [Np, D]
+        idx_pos_ex = idx_pos.repeat_interleave(n_neg)
+        idx_neg_ex = idx_neg.repeat(n_pos)
 
-        muN = est_means[idx_neg]  # [Nn, D]
-        varN = est_vars[idx_neg]  # [Nn, D]
+        muA = est_means[0].unsqueeze(0)
+        muP = est_means[idx_pos_ex]
+        muN = est_means[idx_neg_ex]
 
-        # Pairwise combinations (broadcasting over all pos-neg pairs)
-        muP_ext = muP.unsqueeze(1)  # [Np, 1, D]
-        varP_ext = varP.unsqueeze(1)
-        muN_ext = muN.unsqueeze(0)  # [1, Nn, D]
-        varN_ext = varN.unsqueeze(0)
+        varA = est_vars[0].unsqueeze(0)
+        varP = est_vars[idx_pos_ex]
+        varN = est_vars[idx_neg_ex]
 
-        muA = muA.unsqueeze(0).unsqueeze(0)  # [1, 1, D]
-        varA = varA.unsqueeze(0).unsqueeze(0)
+        probs = self.calculate_lik_prob(muA, muP, muN, varA, varP, varN)
+        loss = -torch.sum(torch.log(probs + self.eps))
 
-        T1 = ((muA - muP_ext) ** 2 + varA + varP_ext).sum(dim=2)
-        T2 = ((muA - muN_ext) ** 2 + varA + varN_ext).sum(dim=2)
-        diff = T2 - T1  # shape: [Np, Nn]
+        const_ = NmulPnN / (self.alpha * float(n_pos * n_neg))
+        return const_ * loss
 
-        sigma2 = (2 * varA + varP_ext + varN_ext).sum(dim=2).clamp(min=1e-8)
-        sigma = torch.sqrt(sigma2)
+    def calculate_lik_prob(self, muA, muP, muN, varA, varP, varN):
+        muA2 = muA.pow(2)
+        muP2 = muP.pow(2)
+        muN2 = muN.pow(2)
 
-        probs = Normal(loc=0.0, scale=sigma).cdf(diff - self.margin)
-        loss = -torch.log(probs.clamp(min=1e-8)).mean()
+        varP2 = varP.pow(2)
+        varN2 = varN.pow(2)
 
-        return self.alpha * loss / NmulPnN
+        mu = torch.sum(muP2 + varP - muN2 - varN - 2 * muA * (muP - muN), dim=1)
+
+        T1 = varP2 + 2 * muP2 * varP + 2 * (varA + muA2) * (varP + muP2) - 2 * muA2 * muP2 - 4 * muA * muP * varP
+        T2 = varN2 + 2 * muN2 * varN + 2 * (varA + muA2) * (varN + muN2) - 2 * muA2 * muN2 - 4 * muA * muN * varN
+        T3 = 4 * muP * muN * varA
+
+        sigma = torch.sqrt(torch.clamp(torch.sum(2 * T1 + 2 * T2 - 2 * T3, dim=1), min=0.0))
+        dist = Normal(loc=mu, scale=sigma + self.eps)
+        return dist.cdf(torch.tensor(self.margin, device=mu.device))
+    
+
+    
