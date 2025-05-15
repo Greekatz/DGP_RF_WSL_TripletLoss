@@ -81,6 +81,9 @@ class DGP_RF:
 
         for i, idx in enumerate(index_vec):
             instance = data_X.data_mat[idx]
+            if isinstance(instance, np.ndarray):
+                instance = torch.from_numpy(instance).float()
+            instance = instance.cuda()
             selected_rows = set_indices[i]
             X.append(instance[selected_rows])
             X_idx.extend([i] * len(selected_rows))
@@ -106,8 +109,8 @@ class DGP_RF:
             X, X_idx = self.gen_input_fromList(data_set_, [idx], set_indices)
 
             with torch.no_grad():
-                X = torch.tensor(X, dtype=torch.float32).cuda()
-                X_idx = torch.tensor(X_idx, dtype=torch.long).cuda()
+                X = X.float().cuda()
+                X_idx = X_idx.long().cuda()
                 mean, var = self.model(X, X_idx)
 
             means_all.append(mean.cpu())
