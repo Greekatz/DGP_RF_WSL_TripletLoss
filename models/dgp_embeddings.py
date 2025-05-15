@@ -24,7 +24,8 @@ class DGP_RF_Embeddings(nn.Module):
         weighted = precision * inter_means
 
         unique_ids = torch.unique(X_idx)
-        embedd_means = torch.zeros((len(unique_ids), inter_means.size(1)), device=X.device)
+        embed_dim = inter_means.shape[1]
+        embedd_means = torch.zeros((len(unique_ids), embed_dim), device=X.device)
         embedd_vars = torch.zeros_like(embedd_means)
 
         for i, uid in enumerate(unique_ids):
@@ -34,6 +35,7 @@ class DGP_RF_Embeddings(nn.Module):
             var_i = 1.0 / w_sum
             embedd_means[i] = mean_sum * var_i
             embedd_vars[i] = var_i
+
 
         return embedd_means, embedd_vars
 
