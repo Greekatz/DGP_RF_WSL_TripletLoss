@@ -85,8 +85,9 @@ class DGP_RF:
             X.append(instance[selected_rows])
             X_idx.extend([i] * len(selected_rows))
 
-        X = np.vstack(X)
-        X_idx = np.array(X_idx)
+        X = torch.cat(X, dim=0)  # assuming X is a list of tensors of shape [N, D]
+        X_idx = torch.tensor(X_idx, dtype=torch.long, device=X.device)
+
         return X, X_idx
     
     def predict(self, tst_index, sub_Ni=None, rep_num=1, flag_trndata=False):
