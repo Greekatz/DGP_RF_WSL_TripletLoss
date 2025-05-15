@@ -40,8 +40,8 @@ class DGP_RF:
 
 
     def run_optimization(self, X_np, X_idx_np, Y_np, regul_const=1e-2):
-        X = torch.tensor(X_np, dtype=torch.float32).cuda()
-        X_idx = torch.tensor(X_idx_np, dtype=torch.long).cuda()
+        X = X_np.clone().detach().float().cuda() if isinstance(X_np, torch.Tensor) else torch.tensor(X_np, dtype=torch.float32).cuda()
+        X_idx = X_idx_np.clone().detach().long().cuda() if isinstance(X_idx_np, torch.Tensor) else torch.tensor(X_idx_np, dtype=torch.long).cuda()
         Y = torch.tensor(Y_np, dtype=torch.float32).cuda()
 
         self.model.train()
@@ -86,7 +86,7 @@ class DGP_RF:
             if selected.ndim == 1:
                 selected = selected[np.newaxis, :]  # ensure 2D
 
-            X.append(torch.tensor(selected, dtype=torch.float32))
+            X.append(selected.clone().detach())
             X_idx.extend([i] * selected.shape[0])
 
         X = torch.cat(X, dim=0)               # shape: [total_selected, D]
