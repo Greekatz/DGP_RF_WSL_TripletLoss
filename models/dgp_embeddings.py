@@ -16,6 +16,8 @@ class DGP_RF_Embedding(nn.Module):
         for layer in self.layers:
             means, vars = layer(means, vars)
 
+        X_idx = X_idx.view(-1)
+
         inv_vars = 1 / vars
         summed_inv = torch.zeros_like(inv_vars).index_add(0, X_idx, inv_vars)
         summed_weighted = torch.zeros_like(means).index_add(0, X_idx, means * inv_vars)
