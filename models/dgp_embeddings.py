@@ -7,7 +7,7 @@ from models.VBPLayer import VBLayer
 
 class DGP_RF_Embeddings(nn.Module):
     def __init__(self, fea_dims, num_RF):
-        super(DGP_RF_Embeddings, self).__init__()
+        super().__init__()
 
         self.layers = nn.ModuleList()
         for i in range(len(fea_dims) - 1):
