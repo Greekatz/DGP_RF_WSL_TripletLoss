@@ -59,16 +59,20 @@ class DGP_RF:
     
     def mark_subImgs(self, data_X, index_vec, sub_Ni=1, rep_num=1, flag_AllIns=False):
         # Randomly selects `sub_Ni` sub-instances per instance (unless flag_AllIns=True)
-        Nis = np.hstack([data_X.Nis[idx] for idx in index_vec])
+        Nis = [data_X.Nis[idx] for idx in index_vec]
         set_indices = []
 
         for _ in range(rep_num):
             set_indices_sub = []
             for Ni in Nis:
-                if not flag_AllIns:
-                    selected = np.sort(np.random.choice(np.arange(Ni), size=min(Ni, sub_Ni), replace=False))
-                else:
+                if flag_AllIns:
                     selected = np.arange(Ni)
+                else:
+                    max_sel = min(Ni, sub_Ni)
+                    if max_sel == 1:
+                        selected = np.array([0])  # fallback if only 1 sub-instance
+                    else:
+                        selected = np.sort(np.random.choice(np.arange(Ni), size=max_sel, replace=False))
                 set_indices_sub.append(selected)
             set_indices.append(set_indices_sub)
 
