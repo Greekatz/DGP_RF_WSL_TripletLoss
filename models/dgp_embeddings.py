@@ -17,6 +17,7 @@ class DGP_RF_Embeddings(nn.Module):
         for layer in self.layers:
             inter_means, inter_vars = layer(inter_means, inter_vars)
 
+        embed_dim = inter_means.shape[1]
         var = inter_vars + 1e-8
         precision = 1.0 / var
         weighted = precision * inter_means
