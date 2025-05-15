@@ -13,7 +13,7 @@ class ProbabilisticTripletLoss(nn.Module):
         y_true: [B] tensor with values [-1, 1, 0] (anchor, pos, neg)
         est_means: [B, D] mean embeddings
         est_vars: [B, D] variance embeddings
-        NmulPnN: Normalization term
+        NmulPnN: Normalization constant (float)
         """
         device = est_means.device
         idx_anchor = (y_true == -1)
@@ -23,17 +23,33 @@ class ProbabilisticTripletLoss(nn.Module):
         if idx_pos.sum() == 0 or idx_neg.sum() == 0:
             return torch.tensor(0.0, device=device)
 
-        muA, muP, muN = est_means[idx_anchor], est_means[idx_pos], est_means[idx_neg]
-        varA, varP, varN = est_vars[idx_anchor], est_vars[idx_pos], est_vars[idx_neg]
+        # Anchor is assumed to be single (or first sample)
+        muA = est_means[idx_anchor].squeeze(0)  # [D]
+        varA = est_vars[idx_anchor].squeeze(0)  # [D]
 
-        T1 = ((muA - muP) ** 2 + varA + varP).sum(dim=1)
-        T2 = ((muA - muN) ** 2 + varA + varN).sum(dim=1)
-        T3 = (varA + varP).sum(dim=1).clamp(min=1e-8) + (varA + varN).sum(dim=1).clamp(min=1e-8)
+        muP = est_means[idx_pos]  # [Np, D]
+        varP = est_vars[idx_pos]  # [Np, D]
 
-        diff = T2 - T1
-        sigma = torch.sqrt(T3)
+        muN = est_means[idx_neg]  # [Nn, D]
+        varN = est_vars[idx_neg]  # [Nn, D]
 
-        prob = Normal(loc=0.0, scale=sigma).cdf(diff - self.margin)
-        loss = -torch.log(prob.clamp(min=1e-8)).mean()
+        # Pairwise combinations (broadcasting over all pos-neg pairs)
+        muP_ext = muP.unsqueeze(1)  # [Np, 1, D]
+        varP_ext = varP.unsqueeze(1)
+        muN_ext = muN.unsqueeze(0)  # [1, Nn, D]
+        varN_ext = varN.unsqueeze(0)
+
+        muA = muA.unsqueeze(0).unsqueeze(0)  # [1, 1, D]
+        varA = varA.unsqueeze(0).unsqueeze(0)
+
+        T1 = ((muA - muP_ext) ** 2 + varA + varP_ext).sum(dim=2)
+        T2 = ((muA - muN_ext) ** 2 + varA + varN_ext).sum(dim=2)
+        diff = T2 - T1  # shape: [Np, Nn]
+
+        sigma2 = (2 * varA + varP_ext + varN_ext).sum(dim=2).clamp(min=1e-8)
+        sigma = torch.sqrt(sigma2)
+
+        probs = Normal(loc=0.0, scale=sigma).cdf(diff - self.margin)
+        loss = -torch.log(probs.clamp(min=1e-8)).mean()
 
         return self.alpha * loss / NmulPnN
