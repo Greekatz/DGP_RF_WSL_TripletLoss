@@ -5,7 +5,7 @@ import torch.nn as nn
 
 class VBLinear(nn.Module):
     def __init__(self, in_features, out_features, relu_output=False):
-        super(VBLinear, self).__init__()
+        super().__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.relu_output = relu_output
