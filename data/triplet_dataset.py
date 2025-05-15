@@ -10,6 +10,11 @@ class TripletDataset(Dataset):
         self.neg_idx = neg_idx
         self.sub_Ni = sub_Ni
 
+        self.data_X.data_mat = [
+            torch.tensor(ins, dtype=torch.float32) if not isinstance(ins, torch.Tensor) else ins
+            for ins in self.data_X.data_mat
+        ]
+
     def __len__(self):
         return len(self.pos_idx)
 
@@ -30,19 +35,15 @@ class TripletDataset(Dataset):
 
             # Nếu Ni <= sub_Ni, lấy tất cả
             if Ni <= self.sub_Ni:
-                selected_rows = np.arange(Ni)
+                selected_rows = torch.arange(Ni)
             else:
-                selected_rows = np.random.choice(Ni, size=self.sub_Ni, replace=False)
+                selected_rows = torch.randperm(Ni)[:self.sub_Ni]
 
             X_list.append(instance[selected_rows])
             X_idx.extend([i_sub] * len(selected_rows))
 
-        # Kết hợp lại thành tensor
-        X = np.vstack(X_list)                    # shape: [batch_size, D]
-        Y = np.array([-1, 1, 0], dtype=np.float32)  # Anchor, Pos, Neg
+        X = torch.cat(X_list, dim=0)  # shape: [*, D]
+        X_idx = torch.tensor(X_idx, dtype=torch.long)
+        Y = torch.tensor([-1.0, 1.0, 0.0], dtype=torch.float32)
 
-        return (
-            torch.from_numpy(X).float(),
-            torch.tensor(X_idx, dtype=torch.long),
-            torch.from_numpy(Y)
-        )
+        return X, X_idx, Y

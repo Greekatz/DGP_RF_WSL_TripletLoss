@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import math
 
 
@@ -10,25 +9,24 @@ class VBLayer(nn.Module):
                  kernel_initializer=torch.nn.init.xavier_normal_,
                  bias_initializer=torch.nn.init.zeros_,
                  prior_prec=1.0):
-        super(VBLayer, self).__init__()
+        super().__init__()
         self.units = units
         self.d_input = dim_input
         self.is_ReLUoutput = is_ReLUoutput
         self.use_bias = use_bias
         self.prior_prec = prior_prec
 
-        # Weight means and log variances
         self.w_mus = nn.Parameter(torch.empty(dim_input, units))
         self.w_logsig2 = nn.Parameter(torch.empty(dim_input, units))
 
-        # Bias term
-        self.b = nn.Parameter(torch.empty(1, units)) if use_bias else None
+        if use_bias:
+            self.b = nn.Parameter(torch.empty(1, units))
+        else:
+            self.register_buffer("b", torch.zeros(1, units))  # not a Parameter
 
-        # Gamma for ARD in ReLU output
         if is_ReLUoutput:
             self.gamma = nn.Parameter(torch.empty(1, units))
 
-        # Initialize weights
         kernel_initializer(self.w_mus)
         kernel_initializer(self.w_logsig2)
         if use_bias:
@@ -38,7 +36,7 @@ class VBLayer(nn.Module):
 
     def forward(self, in_means, in_vars=None):
         out_means = torch.matmul(in_means, self.w_mus)
-        if self.use_bias:
+        if self.b is not None:
             out_means += self.b
 
         if not self.is_ReLUoutput:
@@ -67,8 +65,10 @@ class VBLayer(nn.Module):
 
     def calculate_kl(self):
         w_logsig2_clipped = torch.clamp(self.w_logsig2, min=-11.0, max=11.0)
+        log_prior_prec = math.log(self.prior_prec)
+
         kl = 0.5 * torch.sum(
             self.prior_prec * (self.w_mus.pow(2) + torch.exp(w_logsig2_clipped)) -
-            w_logsig2_clipped - torch.log(torch.tensor(self.prior_prec))
+            w_logsig2_clipped - log_prior_prec
         )
         return kl
