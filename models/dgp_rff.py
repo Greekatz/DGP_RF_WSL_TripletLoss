@@ -152,7 +152,7 @@ class DGP_RF:
                 )
 
                 index_vec = np.concatenate((pos_idx, neg_idx))
-                set_indices = self.mark_subImgs_by_variance(self.data_X, index_vec, sub_Ni=self.sub_Ni)
+                set_indices = self.mark_subImgs(self.data_X, index_vec, sub_Ni=self.sub_Ni)
                 X, X_idx = self.gen_input_fromList(self.data_X, index_vec, set_indices[0])
 
                 Y = self.Y[index_vec]
