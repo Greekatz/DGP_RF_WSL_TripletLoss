@@ -109,7 +109,7 @@ class DGP_RF:
         means_all, vars_all = [], []
 
         for idx in tst_index:
-            set_indices = self.mark_subImgs_by_variance(data_set_, [idx], sub_Ni=sub_Ni, rep_num=rep_num)[0]
+            set_indices = self.mark_subImgs(data_set_, [idx], sub_Ni=sub_Ni, rep_num=rep_num)[0]
             X, X_idx = self.gen_input_fromList(data_set_, [idx], set_indices)
 
             with torch.no_grad():
