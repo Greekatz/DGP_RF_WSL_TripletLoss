@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from torch.distributions.normal import Normal
 
 from models.VBPLayer import VBLayer
@@ -23,6 +24,9 @@ class DGP_RF_Embeddings(nn.Module):
             inter_means, inter_vars = layer(inter_means, inter_vars)
 
         out_means, out_vars = inter_means, inter_vars
+        if out_vars is None:
+            raise ValueError("out_vars is None — check if your VBLayer is returning variance.")
+        out_vars = torch.clamp(out_vars, min=1e-5, max=1e2)
         mat_tmp1 = 1.0 / (out_vars + 1e-8)  # prevent div-by-zero
         weighted = mat_tmp1 * out_means
 
