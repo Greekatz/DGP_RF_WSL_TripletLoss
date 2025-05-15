@@ -57,26 +57,20 @@ class DGP_RF:
 
         return obj.item()
     
-    def mark_subImgs(self, data_X, index_vec, sub_Ni=1, rep_num=1, flag_AllIns=False):
-        # Randomly selects `sub_Ni` sub-instances per instance (unless flag_AllIns=True)
-        Nis = [data_X.Nis[idx] for idx in index_vec]
+    def mark_subImgs_by_variance(self, data_X, index_vec, sub_Ni=1, rep_num=1):
         set_indices = []
 
         for _ in range(rep_num):
             set_indices_sub = []
-            for Ni in Nis:
-                if flag_AllIns:
-                    selected = np.arange(Ni)
-                else:
-                    max_sel = min(Ni, sub_Ni)
-                    if max_sel == 1:
-                        selected = np.array([0])  # fallback if only 1 sub-instance
-                    else:
-                        selected = np.sort(np.random.choice(np.arange(Ni), size=max_sel, replace=False))
-                set_indices_sub.append(selected)
+            for idx in index_vec:
+                instance = data_X.data_mat[idx]  # shape: [N_sub, D]
+                var_scores = np.var(instance, axis=1)  # variance per sub-vector
+                topk = np.argsort(var_scores)[-sub_Ni:]
+                set_indices_sub.append(np.sort(topk))
             set_indices.append(set_indices_sub)
 
         return set_indices
+
     
     def gen_input_fromList(self, data_X, index_vec, set_indices):
         X = []
@@ -109,7 +103,7 @@ class DGP_RF:
         means_all, vars_all = [], []
 
         for idx in tst_index:
-            set_indices = self.mark_subImgs(data_set_, [idx], sub_Ni=sub_Ni, rep_num=rep_num)[0]
+            set_indices = self.mark_subImgs_by_variance(data_set_, [idx], sub_Ni=sub_Ni, rep_num=rep_num)[0]
             X, X_idx = self.gen_input_fromList(data_set_, [idx], set_indices)
 
             with torch.no_grad():
@@ -152,7 +146,7 @@ class DGP_RF:
                 )
 
                 index_vec = np.concatenate((pos_idx, neg_idx))
-                set_indices = self.mark_subImgs(self.data_X, index_vec, sub_Ni=self.sub_Ni)
+                set_indices = self.mark_subImgs_by_variance(self.data_X, index_vec, sub_Ni=self.sub_Ni)
                 X, X_idx = self.gen_input_fromList(self.data_X, index_vec, set_indices[0])
 
                 Y = self.Y[index_vec]
