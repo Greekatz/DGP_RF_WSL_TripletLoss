@@ -19,12 +19,12 @@ class DGP_RF_Embedding(nn.Module):
         X_idx = X_idx.view(-1)
 
         inv_vars = 1 / vars
-        summed_inv = torch.zeros_like(inv_vars).index_add(0, X_idx, inv_vars)
-        summed_weighted = torch.zeros_like(means).index_add(0, X_idx, means * inv_vars)
+        num_images = torch.max(X_idx).item() + 1
+        D = inv_vars.shape[1]
+
+        summed_inv = torch.zeros(num_images, D, device=inv_vars.device).index_add(0, X_idx, inv_vars)
+        summed_weighted = torch.zeros(num_images, D, device=means.device).index_add(0, X_idx, means * inv_vars)
 
         emb_vars = 1 / summed_inv
         emb_means = emb_vars * summed_weighted
         return emb_means, emb_vars
-
-    def regularization(self):
-        return sum(layer.kl_divergence() for layer in self.layers if isinstance(layer, VBLinear))
