@@ -16,28 +16,30 @@ class DGP_RF_Embeddings(nn.Module):
         for layer in self.layers:
             inter_means, inter_vars = layer(inter_means, inter_vars)
 
-        if inter_vars is None:
-            inter_vars = torch.zeros_like(inter_means)
-
         var = inter_vars + 1e-8
         precision = 1.0 / var
         weighted = precision * inter_means
 
-        unique_ids = torch.unique(X_idx)
+        unique_ids = torch.unique(X_idx, sorted=True)
         embed_dim = inter_means.size(1)
+
         embedd_means = torch.zeros((len(unique_ids), embed_dim), device=X.device)
         embedd_vars = torch.zeros_like(embedd_means)
 
-        for i, uid in enumerate(unique_ids):
+        uid2idx = {uid.item(): i for i, uid in enumerate(unique_ids)}
+
+        for uid in unique_ids:
+            idx = uid2idx[uid.item()]
             mask = (X_idx == uid)
             w_sum = precision[mask].sum(dim=0) + 1e-8
             mean_sum = weighted[mask].sum(dim=0)
             var_i = 1.0 / w_sum
-            embedd_means[i] = mean_sum * var_i
-            embedd_vars[i] = var_i
 
+            embedd_means[idx] = mean_sum * var_i
+            embedd_vars[idx] = var_i
 
         return embedd_means, embedd_vars
+
 
     def cal_regul(self):
         return sum(layer.calculate_kl() for layer in self.layers)
