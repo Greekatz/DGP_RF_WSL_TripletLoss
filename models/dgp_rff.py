@@ -64,7 +64,7 @@ class DGP_RF:
             set_indices_sub = []
             for idx in index_vec:
                 instance = data_X.data_mat[idx]  # shape: [N_sub, D]
-                var_scores = np.var(instance, axis=1)  # variance per sub-vector
+                var_scores = np.var(instance, axis=1).cpu().numpy()  # variance per sub-vector
                 topk = np.argsort(var_scores)[-sub_Ni:]
                 set_indices_sub.append(np.sort(topk))
             set_indices.append(set_indices_sub)
