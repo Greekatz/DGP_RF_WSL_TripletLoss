@@ -36,8 +36,4 @@ class TripletDataset(Dataset):
         X_idx = np.array(X_idx)             # [0, 1, 2]
         Y = np.array([-1, 1, 0], dtype=np.float32)
 
-        return (
-            torch.from_numpy(X).float(), 
-            torch.tensor(X_idx, dtype=torch.long), 
-            torch.from_numpy(Y)
-        )
+        return X, X_idx, Y
