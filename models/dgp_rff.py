@@ -77,17 +77,23 @@ class DGP_RF:
     def gen_input_fromList(self, data_X, index_vec, set_indices):
         X = []
         X_idx = []
-        offset = 0
 
         for i, idx in enumerate(index_vec):
-            instance = data_X.data_mat[idx]
+            instance = data_X.data_mat[idx]  # assumed shape: [N_i, D]
             selected_rows = set_indices[i]
-            X.append(instance[selected_rows])
-            X_idx.extend([i] * len(selected_rows))
 
-        X = np.vstack(X)
-        X_idx = np.array(X_idx)
-        return X, X_idx
+            selected = instance[selected_rows]
+            if selected.ndim == 1:
+                selected = selected[np.newaxis, :]  # ensure 2D
+
+            X.append(torch.tensor(selected, dtype=torch.float32))
+            X_idx.extend([i] * selected.shape[0])
+
+        X = torch.cat(X, dim=0)               # shape: [total_selected, D]
+        X_idx = torch.tensor(X_idx, dtype=torch.long)  # shape: [total_selected]
+
+        return X.cuda(), X_idx.cuda()
+
     
     def predict(self, tst_index, sub_Ni=None, rep_num=1, flag_trndata=False):
         if sub_Ni is None:
