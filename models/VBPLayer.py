@@ -47,7 +47,7 @@ class VBLayer(nn.Module):
             term2 = torch.matmul(in_means.pow(2), torch.exp(self.w_logsig2))
             out_vars = term1 + term2
         else:
-            pZ = torch.sigmoid(out_means)
+            pZ = torch.tanh(out_means)
             factor = torch.exp(0.5 * self.gamma) * (2 / math.sqrt(self.units))
             out_means = pZ * out_means * factor
 
