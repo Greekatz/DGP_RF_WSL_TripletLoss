@@ -2,13 +2,12 @@ import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 import numpy as np
-from tqdm import trange
-from torch.utils.data import DataLoader
+import os
 
-from data.triplet_dataset import TripletDataset
+from tqdm import trange
+
 from models.dgp_embeddings import DGP_RF_Embeddings
 from losses.triplet_loss import ProbabilisticTripletLoss
-
 
 class DGP_RF:
     def __init__(self, data_X, data_Y, trn_index, setting, str_filepath=None):
@@ -23,9 +22,10 @@ class DGP_RF:
         self.n_RF = setting.n_RF
         self.regul_const = float(setting.regul_const)
         self.alpha = setting.alpha
+        
 
         fea_dims_sub = [100] * setting.n_layers
-        fea_dims = [data_X.data_mat[0].shape[-1]] + fea_dims_sub
+        fea_dims = [data_X.data_mat[0].shape[1]] + fea_dims_sub
 
         self.data_X = data_X
         self.trn_index = trn_index
@@ -38,42 +38,57 @@ class DGP_RF:
         self.optimizer = Adam(self.model.parameters(), lr=0.001)
         self.loss_fn = ProbabilisticTripletLoss(alpha=self.alpha)
 
-    def model_fit(self, save_path=None):
-        dataset = TripletDataset(self.data_X, self.Y, self.pos_idx, self.neg_idx, self.sub_Ni)
-        loader = DataLoader(
-            dataset,
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=4,
-            pin_memory=True
-        )
 
-        for epoch in trange(self.max_iter, desc="Training Epochs"):
-            self.model.train()
-            total_obj = 0.0
+    def run_optimization(self, X_np, X_idx_np, Y_np, regul_const=1e-2):
+        X = torch.tensor(X_np, dtype=torch.float32).cuda()
+        X_idx = torch.tensor(X_idx_np, dtype=torch.long).cuda()
+        Y = torch.tensor(Y_np, dtype=torch.float32).cuda()
 
-            for X, X_idx, Y in loader:
-                X = X.cuda(non_blocking=True)
-                X_idx = X_idx.cuda(non_blocking=True)
-                Y = Y.cuda(non_blocking=True)
+        self.model.train()
+        self.optimizer.zero_grad()
 
-                self.optimizer.zero_grad()
-                est_means, est_vars = self.model(X, X_idx)
-                loss = self.loss_fn(Y, est_means, est_vars, self.NpNm)
-                reg = self.model.cal_regul()
-                obj = loss + self.regul_const * reg
-                obj.backward()
-                self.optimizer.step()
+        est_means, est_vars = self.model(X, X_idx)
+        loss = self.loss_fn(Y, est_means, est_vars, self.NpNm)
+        reg_ = self.model.cal_regul()
+        obj = loss + regul_const * reg_
 
-                total_obj += obj.item()
+        obj.backward()
+        self.optimizer.step()
 
-            avg_obj = total_obj / len(loader)
-            print(f"Epoch {epoch + 1}/{self.max_iter} - Loss: {avg_obj:.4f}")
+        return obj.item()
+    
+    def mark_subImgs(self, data_X, index_vec, sub_Ni=1, rep_num=1, flag_AllIns=False):
+        # Randomly selects `sub_Ni` sub-instances per instance (unless flag_AllIns=True)
+        Nis = np.hstack([data_X.Nis[idx] for idx in index_vec])
+        set_indices = []
 
-        if save_path:
-            torch.save(self.model.state_dict(), save_path)
-            print(f"Model saved to {save_path}")
+        for _ in range(rep_num):
+            set_indices_sub = []
+            for Ni in Nis:
+                if not flag_AllIns:
+                    selected = np.sort(np.random.choice(np.arange(Ni), size=min(Ni, sub_Ni), replace=False))
+                else:
+                    selected = np.arange(Ni)
+                set_indices_sub.append(selected)
+            set_indices.append(set_indices_sub)
 
+        return set_indices
+    
+    def gen_input_fromList(self, data_X, index_vec, set_indices):
+        X = []
+        X_idx = []
+        offset = 0
+
+        for i, idx in enumerate(index_vec):
+            instance = data_X.data_mat[idx]
+            selected_rows = set_indices[i]
+            X.append(instance[selected_rows])
+            X_idx.extend([i] * len(selected_rows))
+
+        X = np.vstack(X)
+        X_idx = np.array(X_idx)
+        return X, X_idx
+    
     def predict(self, tst_index, sub_Ni=None, rep_num=1, flag_trndata=False):
         if sub_Ni is None:
             sub_Ni = self.sub_Ni
@@ -86,14 +101,12 @@ class DGP_RF:
         means_all, vars_all = [], []
 
         for idx in tst_index:
-            instance = data_set_.data_mat[idx]
-            Ni = data_set_.Nis[idx]
-            selected = np.arange(Ni) if Ni <= sub_Ni else np.random.choice(Ni, size=sub_Ni, replace=False)
-
-            X = torch.tensor(instance[selected], dtype=torch.float32).cuda()
-            X_idx = torch.zeros(X.shape[0], dtype=torch.long).cuda()
+            set_indices = self.mark_subImgs(data_set_, [idx], sub_Ni=sub_Ni, rep_num=rep_num)[0]
+            X, X_idx = self.gen_input_fromList(data_set_, [idx], set_indices)
 
             with torch.no_grad():
+                X = torch.tensor(X, dtype=torch.float32).cuda()
+                X_idx = torch.tensor(X_idx, dtype=torch.long).cuda()
                 mean, var = self.model(X, X_idx)
 
             means_all.append(mean.cpu())
@@ -104,7 +117,47 @@ class DGP_RF:
 
         return means_all.numpy(), vars_all.numpy()
 
-    def get_embeddings(self, indices):
-        self.model.eval()
-        means, _ = self.predict(indices, flag_trndata=True)
-        return means
+
+    def model_fit(self, save_path=None):
+        iters_Pos = len(self.pos_idx)
+        n_pos = int(max(round(self.batch_size / 2), 1))
+        n_neg = n_pos  # Can be tuned
+
+        for epoch in trange(self.max_iter, desc="Training Epochs"):
+            eta = 1.0  # can implement schedule later
+            total_obj = 0.0
+
+            for i in range(iters_Pos):
+                anc_idx = self.pos_idx[i]
+
+                pos_idx = np.random.choice(
+                    np.setdiff1d(self.pos_idx, anc_idx),
+                    min(n_pos, len(self.pos_idx) - 1),
+                    replace=False
+                )
+                pos_idx = np.concatenate(([anc_idx], pos_idx))
+
+                neg_idx = np.random.choice(
+                    self.neg_idx,
+                    min(n_neg, len(self.neg_idx)),
+                    replace=False
+                )
+
+                index_vec = np.concatenate((pos_idx, neg_idx))
+                set_indices = self.mark_subImgs(self.data_X, index_vec, sub_Ni=self.sub_Ni)
+                X, X_idx = self.gen_input_fromList(self.data_X, index_vec, set_indices[0])
+
+                Y = self.Y[index_vec]
+                Y[0] = -1  # anchor
+
+                total_obj += self.run_optimization(X, X_idx, Y, eta * self.regul_const)
+
+            avg_obj = total_obj / iters_Pos
+            print(f"Epoch {epoch + 1}/{self.max_iter} - Loss: {avg_obj:.4f}")
+
+        if save_path:
+            torch.save(self.model.state_dict(), save_path)
+            print(f"Model saved to {save_path}")
+
+
+    
