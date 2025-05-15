@@ -27,19 +27,16 @@ class DGP_RF_Embeddings(nn.Module):
         embedd_vars = torch.zeros_like(embedd_means)
 
         for i, uid in enumerate(unique_ids):
-            indices = (X_idx == uid).nonzero(as_tuple=True)[0]  # shape: [n_i]
+            indices = (X_idx == uid).nonzero(as_tuple=True)[0]
             selected_weighted = weighted[indices]               # shape: [n_i, D]
             selected_precision = precision[indices]             # shape: [n_i, D]
 
             w_sum = selected_precision.sum(dim=0) + 1e-8         # shape: [D]
             mean_sum = selected_weighted.sum(dim=0)              # shape: [D]
             var_i = 1.0 / w_sum                                  # shape: [D]
-            embedd_means[i] = mean_sum * var_i                   # shape: [D]
-            embedd_vars[i] = var_i    
-            print("mean_sum.shape:", mean_sum.shape)
-            print("var_i.shape:", var_i.shape)
-            print("embedd_means[i].shape:", embedd_means[i].shape)
-                           # shape: [D]
+
+            embedd_means[i] = (mean_sum * var_i).view(-1)       # ensure shape: [D]
+            embedd_vars[i] = var_i.view(-1)                     # ensure shape: [D]
 
         return embedd_means, embedd_vars
 
