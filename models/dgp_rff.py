@@ -25,8 +25,8 @@ class DGP_RF:
         self.alpha = setting.alpha
 
         fea_dims_sub = [100] * setting.n_layers
-        fea_dims = [data_X.data_mat.shape[1]] + fea_dims_sub
-
+        fea_dims = [data_X.data_mat[0].shape[1]] + fea_dims_sub
+    
         self.data_X = data_X
         self.trn_index = trn_index
         self.Ytrn = data_Y[trn_index]
