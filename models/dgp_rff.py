@@ -6,7 +6,7 @@ from tqdm import trange
 from torch.utils.data import DataLoader
 
 from data.triplet_dataset import TripletDataset
-from models.dgp_embeddings import DGP_RF_Embeddings
+from models.dgp_embeddings import DGP_RF_Embedding
 from losses.triplet_loss import ProbabilisticTripletLoss
 
 
@@ -34,7 +34,7 @@ class DGP_RF:
         self.pos_idx = np.intersect1d(np.argwhere(self.Y == 1.0), trn_index).flatten()
         self.neg_idx = np.intersect1d(np.argwhere(self.Y == 0.0), trn_index).flatten()
 
-        self.model = DGP_RF_Embeddings(fea_dims, self.n_RF).cuda()
+        self.model = DGP_RF_Embedding(fea_dims, self.n_RF).cuda()
         self.optimizer = Adam(self.model.parameters(), lr=0.001)
         self.loss_fn = ProbabilisticTripletLoss(alpha=self.alpha)
 

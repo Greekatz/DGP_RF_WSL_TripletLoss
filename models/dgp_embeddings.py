@@ -1,44 +1,28 @@
 import torch
 import torch.nn as nn
-from models.VBPLayer import VBLayer
+from models.VBPLayer import VBLinear
 
-class DGP_RF_Embeddings(nn.Module):
-    def __init__(self, fea_dims, num_RF):
+class DGP_RF_Embedding(nn.Module):
+    def __init__(self, fea_dims, n_rff):
         super().__init__()
         self.layers = nn.ModuleList()
+
         for i in range(len(fea_dims) - 1):
-            self.layers.append(VBLayer(num_RF, fea_dims[i], is_ReLUoutput=True))  # Omega
-            self.layers.append(VBLayer(fea_dims[i + 1], num_RF))  # Weight
+            self.layers.append(VBLinear(fea_dims[i], n_rff, relu_output=True))
+            self.layers.append(VBLinear(n_rff, fea_dims[i + 1]))
 
     def forward(self, X, X_idx):
-        inter_means, inter_vars = X, None
-
+        means, vars = X, None
         for layer in self.layers:
-            inter_means, inter_vars = layer(inter_means, inter_vars)
+            means, vars = layer(means, vars)
 
-        var = inter_vars + 1e-8
-        precision = 1.0 / var
-        weighted = precision * inter_means
+        inv_vars = 1 / vars
+        summed_inv = torch.zeros_like(inv_vars).index_add(0, X_idx, inv_vars)
+        summed_weighted = torch.zeros_like(means).index_add(0, X_idx, means * inv_vars)
 
-        unique_ids = torch.unique(X_idx, sorted=True)
-        embed_dim = inter_means.shape[1]  # ✅ Now correct
+        emb_vars = 1 / summed_inv
+        emb_means = emb_vars * summed_weighted
+        return emb_means, emb_vars
 
-        embedd_means = torch.zeros((len(unique_ids), embed_dim), device=X.device)
-        embedd_vars = torch.zeros_like(embedd_means)
-
-        for i, uid in enumerate(unique_ids):
-            indices = (X_idx == uid).nonzero(as_tuple=True)[0]
-            selected_weighted = weighted[indices]
-            selected_precision = precision[indices]
-
-            w_sum = selected_precision.sum(dim=0) + 1e-8
-            mean_sum = selected_weighted.sum(dim=0)
-            var_i = 1.0 / w_sum
-
-            embedd_means[i] = (mean_sum * var_i).view(-1)
-            embedd_vars[i] = var_i.view(-1)
-
-        return embedd_means, embedd_vars
-
-    def cal_regul(self):
-        return sum(layer.calculate_kl() for layer in self.layers)
+    def regularization(self):
+        return sum(layer.kl_divergence() for layer in self.layers if isinstance(layer, VBLinear))
