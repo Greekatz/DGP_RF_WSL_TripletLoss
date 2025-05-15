@@ -20,30 +20,23 @@ class TripletDataset(Dataset):
 
     def __getitem__(self, i):
         anc_idx = self.pos_idx[i]
+        pos_idx = np.random.choice(np.setdiff1d(self.pos_idx, anc_idx))
+        neg_idx = np.random.choice(self.neg_idx)
 
-        # Chọn positive sample khác anchor
-        pos_pool = self.pos_idx[self.pos_idx != anc_idx]
-        pos_sample = np.random.choice(pos_pool)
-        neg_sample = np.random.choice(self.neg_idx)
-
-        index_vec = [anc_idx, pos_sample, neg_sample]
+        indices = [anc_idx, pos_idx, neg_idx]
         X_list, X_idx = [], []
 
-        for i_sub, idx in enumerate(index_vec):
-            instance = self.data_X.data_mat[idx]  # shape: [Ni, D]
-            Ni = self.data_X.Nis[idx]
+        for i_sub, idx in enumerate(indices):
+            vec = self.data_X.data_mat[idx]  # shape: (704,)
+            X_list.append(vec[None, :])      # → shape: (1, 704)
+            X_idx.append(i_sub)
 
-            # Nếu Ni <= sub_Ni, lấy tất cả
-            if Ni <= self.sub_Ni:
-                selected_rows = torch.arange(Ni)
-            else:
-                selected_rows = torch.randperm(Ni)[:self.sub_Ni]
+        X = np.vstack(X_list)               # → shape: (3, 704)
+        X_idx = np.array(X_idx)             # [0, 1, 2]
+        Y = np.array([-1, 1, 0], dtype=np.float32)
 
-            X_list.append(instance[selected_rows])
-            X_idx.extend([i_sub] * len(selected_rows))
-
-        X = torch.cat(X_list, dim=0)  # shape: [*, D]
-        X_idx = torch.tensor(X_idx, dtype=torch.long)
-        Y = torch.tensor([-1.0, 1.0, 0.0], dtype=torch.float32)
-
-        return X, X_idx, Y
+        return (
+            torch.from_numpy(X).float(), 
+            torch.tensor(X_idx, dtype=torch.long), 
+            torch.from_numpy(Y)
+        )
