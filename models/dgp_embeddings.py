@@ -24,7 +24,7 @@ class DGP_RF_Embeddings(nn.Module):
         weighted = precision * inter_means
 
         unique_ids = torch.unique(X_idx)
-        embed_dim = inter_means.shape[1]
+        embed_dim = inter_means.size(1)
         embedd_means = torch.zeros((len(unique_ids), embed_dim), device=X.device)
         embedd_vars = torch.zeros_like(embedd_means)
 
