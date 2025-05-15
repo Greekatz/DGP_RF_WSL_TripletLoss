@@ -110,10 +110,7 @@ class DGP_RF:
             set_indices = self.mark_subImgs(data_set_, [idx], sub_Ni=sub_Ni, rep_num=rep_num)[0]
             X, X_idx = self.gen_input_fromList(data_set_, [idx], set_indices)
 
-            with torch.no_grad():
-                X = torch.tensor(X, dtype=torch.float32).cuda()
-                X_idx = torch.tensor(X_idx, dtype=torch.long).cuda()
-                mean, var = self.model(X, X_idx)
+            mean, var = self.model(X, X_idx)
 
             means_all.append(mean.cpu())
             vars_all.append(var.cpu())
