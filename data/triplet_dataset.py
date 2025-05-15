@@ -30,6 +30,8 @@ class TripletDataset(Dataset):
             vec = self.data_X.data_mat[idx]  # shape: (704,)
             X_list.append(vec[None, :])      # → shape: (1, 704)
             X_idx.append(i_sub)
+            print("vec.shape:", vec.shape)
+
 
         X = np.vstack(X_list)               # → shape: (3, 704)
         X_idx = np.array(X_idx)             # [0, 1, 2]
