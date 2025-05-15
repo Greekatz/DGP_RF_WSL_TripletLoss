@@ -34,9 +34,12 @@ class DGP_RF_Embeddings(nn.Module):
             w_sum = selected_precision.sum(dim=0) + 1e-8         # shape: [D]
             mean_sum = selected_weighted.sum(dim=0)              # shape: [D]
             var_i = 1.0 / w_sum                                  # shape: [D]
-
             embedd_means[i] = mean_sum * var_i                   # shape: [D]
-            embedd_vars[i] = var_i                               # shape: [D]
+            embedd_vars[i] = var_i    
+            print("mean_sum.shape:", mean_sum.shape)
+            print("var_i.shape:", var_i.shape)
+            print("embedd_means[i].shape:", embedd_means[i].shape)
+                           # shape: [D]
 
         return embedd_means, embedd_vars
 
