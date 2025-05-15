@@ -84,7 +84,7 @@ class DGP_RF:
             if isinstance(instance, np.ndarray):
                 instance = torch.from_numpy(instance).float()
             instance = instance.cuda()
-            selected_rows = set_indices[i]
+            selected_rows = torch.tensor(set_indices[i], dtype=torch.long, device=instance.device)
             X.append(instance[selected_rows])
             X_idx.extend([i] * len(selected_rows))
 
