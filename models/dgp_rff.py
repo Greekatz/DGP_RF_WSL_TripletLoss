@@ -57,20 +57,26 @@ class DGP_RF:
 
         return obj.item()
     
-    def mark_subImgs_by_variance(self, data_X, index_vec, sub_Ni=1, rep_num=1):
+    def mark_subImgs(self, data_X, index_vec, sub_Ni=1, rep_num=1, flag_AllIns=False):
+        # Randomly selects `sub_Ni` sub-instances per instance (unless flag_AllIns=True)
+        Nis = [data_X.Nis[idx] for idx in index_vec]
         set_indices = []
 
         for _ in range(rep_num):
             set_indices_sub = []
-            for idx in index_vec:
-                instance = data_X.data_mat[idx]  # shape: [N_sub, D]
-                var_scores = np.var(instance, axis=1).cpu().numpy()  # variance per sub-vector
-                topk = np.argsort(var_scores)[-sub_Ni:]
-                set_indices_sub.append(np.sort(topk))
+            for Ni in Nis:
+                if flag_AllIns:
+                    selected = np.arange(Ni)
+                else:
+                    max_sel = min(Ni, sub_Ni)
+                    if max_sel == 1:
+                        selected = np.array([0])  # fallback if only 1 sub-instance
+                    else:
+                        selected = np.sort(np.random.choice(np.arange(Ni), size=max_sel, replace=False))
+                set_indices_sub.append(selected)
             set_indices.append(set_indices_sub)
 
         return set_indices
-
     
     def gen_input_fromList(self, data_X, index_vec, set_indices):
         X = []
