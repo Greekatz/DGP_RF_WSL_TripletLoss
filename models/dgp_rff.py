@@ -5,7 +5,8 @@ import numpy as np
 import os
 
 from tqdm import trange
-
+from torch.utils.data import DataLoader
+from data.triplet_dataset import TripletDataset
 from models.dgp_embeddings import DGP_RF_Embeddings
 from losses.triplet_loss import ProbabilisticTripletLoss
 
@@ -118,46 +119,44 @@ class DGP_RF:
         return means_all.numpy(), vars_all.numpy()
 
 
+
     def model_fit(self, save_path=None):
-        iters_Pos = len(self.pos_idx)
-        n_pos = int(max(round(self.batch_size / 2), 1))
-        n_neg = n_pos  # Can be tuned
+        # Khởi tạo TripletDataset & DataLoader
+        dataset = TripletDataset(self.data_X, self.Y, self.pos_idx, self.neg_idx, self.sub_Ni)
+        loader = DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=4,
+            pin_memory=True
+        )
 
         for epoch in trange(self.max_iter, desc="Training Epochs"):
-            eta = 1.0  # can implement schedule later
+            self.model.train()
             total_obj = 0.0
 
-            for i in range(iters_Pos):
-                anc_idx = self.pos_idx[i]
+            for X, X_idx, Y in loader:
+                # Đưa lên GPU
+                X = X.cuda(non_blocking=True)
+                X_idx = X_idx.cuda(non_blocking=True)
+                Y = Y.cuda(non_blocking=True)
 
-                pos_idx = np.random.choice(
-                    np.setdiff1d(self.pos_idx, anc_idx),
-                    min(n_pos, len(self.pos_idx) - 1),
-                    replace=False
-                )
-                pos_idx = np.concatenate(([anc_idx], pos_idx))
+                # Forward & backward
+                self.optimizer.zero_grad()
+                est_means, est_vars = self.model(X, X_idx)
+                loss = self.loss_fn(Y, est_means, est_vars, self.NpNm)
+                reg = self.model.cal_regul()
+                obj = loss + self.regul_const * reg
+                obj.backward()
+                self.optimizer.step()
 
-                neg_idx = np.random.choice(
-                    self.neg_idx,
-                    min(n_neg, len(self.neg_idx)),
-                    replace=False
-                )
+                total_obj += obj.item()
 
-                index_vec = np.concatenate((pos_idx, neg_idx))
-                set_indices = self.mark_subImgs(self.data_X, index_vec, sub_Ni=self.sub_Ni)
-                X, X_idx = self.gen_input_fromList(self.data_X, index_vec, set_indices[0])
-
-                Y = self.Y[index_vec]
-                Y[0] = -1  # anchor
-
-                total_obj += self.run_optimization(X, X_idx, Y, eta * self.regul_const)
-
-            avg_obj = total_obj / iters_Pos
+            avg_obj = total_obj / len(loader)
             print(f"Epoch {epoch + 1}/{self.max_iter} - Loss: {avg_obj:.4f}")
 
         if save_path:
             torch.save(self.model.state_dict(), save_path)
             print(f"Model saved to {save_path}")
 
-
-    
+            
