@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions.normal import Normal
-from torch_scatter import scatter_sum
 
 from models.VBPLayer import VBLayer
 
@@ -28,18 +27,21 @@ class DGP_RF_Embeddings(nn.Module):
         weighted = mat_tmp1 * out_means
 
         unique_ids = torch.unique(X_idx)
-        embedd_means, embedd_vars = [], []
+        embedd_means = []
+        embedd_vars = []
 
         for uid in unique_ids:
             mask = (X_idx == uid)
             w_sum = mat_tmp1[mask].sum(dim=0) + 1e-8
-            mean = weighted[mask].sum(dim=0)
+            mean_sum = weighted[mask].sum(dim=0)
             var = 1.0 / w_sum
-            embedd_means.append((mean * var).unsqueeze(0))
+            embedd_means.append((mean_sum * var).unsqueeze(0))
             embedd_vars.append(var.unsqueeze(0))
 
-        return torch.cat(embedd_means, dim=0), torch.cat(embedd_vars, dim=0)
+        embedd_means = torch.cat(embedd_means, dim=0)
+        embedd_vars = torch.cat(embedd_vars, dim=0)
 
+        return embedd_means, embedd_vars
 
     def cal_regul(self):
         mr_KLsum = 0.0
