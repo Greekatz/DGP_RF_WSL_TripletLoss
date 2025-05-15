@@ -3,10 +3,11 @@ import torch.nn as nn
 from torch.distributions.normal import Normal
 
 class ProbabilisticTripletLoss(nn.Module):
-    def __init__(self, alpha=0.5, margin=0.0, eps=1e-8):
+    def __init__(self, alpha=0.5, margin=1.0,temperature=1.0 ,eps=1e-8):
         super().__init__()
         self.alpha = alpha
         self.margin = margin
+        self.temperature = temperature
         self.eps = eps
 
     def forward(self, y_true, est_means, est_vars, NmulPnN):
@@ -52,7 +53,7 @@ class ProbabilisticTripletLoss(nn.Module):
 
         sigma = torch.sqrt(torch.clamp(torch.sum(2 * T1 + 2 * T2 - 2 * T3, dim=1), min=0.0))
         dist = Normal(loc=mu, scale=sigma + self.eps)
-        return dist.cdf(torch.tensor(self.margin, device=mu.device))
+        return dist.cdf(torch.tensor(self.margin / self.temperature, device=mu.device))
     
 
     
