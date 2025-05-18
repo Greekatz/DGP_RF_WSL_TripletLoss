@@ -12,7 +12,7 @@ class DGP_RF_Embeddings(nn.Module):
         for i in range(len(fea_dims) - 1):
 
             self.layers.append(VBLayer(fea_dims[i], num_RF, is_ReLUoutput=True))     # Omega
-            self.layers.append(VBLayer(num_RF, fea_dims[i + 1], is_ReLUoutput=False)) # Weight
+            self.layers.append(VBLayer(fea_dims[i + 1],num_RF, is_ReLUoutput=False)) # Weight
 
     def forward(self, X, X_idx):
         inter_means = X
