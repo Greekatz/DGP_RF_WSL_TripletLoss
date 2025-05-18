@@ -2,8 +2,6 @@ import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 import numpy as np
-import os
-
 from tqdm import trange
 
 from models.dgp_embeddings import DGP_RF_Embeddings
@@ -18,14 +16,11 @@ class DGP_RF:
         self.iter_print = setting.iter_print
         self.sub_Ni = setting.sub_Ni
         self.batch_size = setting.batch_size
-        self.ker_type = setting.ker_type
         self.n_RF = setting.n_RF
         self.regul_const = float(setting.regul_const)
         self.alpha = setting.alpha
-        
 
-        fea_dims_sub = [100] * setting.n_layers
-        fea_dims = [data_X.data_mat[0].shape[1]] + fea_dims_sub
+        fea_dims = [data_X.data_mat[0].shape[1]] + [100] * setting.n_layers
 
         self.data_X = data_X
         self.trn_index = trn_index
@@ -37,7 +32,6 @@ class DGP_RF:
         self.model = DGP_RF_Embeddings(fea_dims, self.n_RF).cuda()
         self.optimizer = Adam(self.model.parameters(), lr=0.001)
         self.loss_fn = ProbabilisticTripletLoss(alpha=self.alpha)
-
 
     def run_optimization(self, X_np, X_idx_np, Y_np, regul_const=1e-2):
         X = torch.tensor(X_np, dtype=torch.float32).cuda()
@@ -56,9 +50,8 @@ class DGP_RF:
         self.optimizer.step()
 
         return obj.item()
-    
+
     def mark_subImgs(self, data_X, index_vec, sub_Ni=1, rep_num=1, flag_AllIns=False):
-        # Randomly selects `sub_Ni` sub-instances per instance (unless flag_AllIns=True)
         Nis = np.hstack([data_X.Nis[idx] for idx in index_vec])
         set_indices = []
 
@@ -73,11 +66,10 @@ class DGP_RF:
             set_indices.append(set_indices_sub)
 
         return set_indices
-    
+
     def gen_input_fromList(self, data_X, index_vec, set_indices):
         X = []
         X_idx = []
-        offset = 0
 
         for i, idx in enumerate(index_vec):
             instance = data_X.data_mat[idx]
@@ -88,11 +80,11 @@ class DGP_RF:
             X.append(instance[selected_rows])
             X_idx.extend([i] * len(selected_rows))
 
-        X = torch.cat(X, dim=0)  # assuming X is a list of tensors of shape [N, D]
+        X = torch.cat(X, dim=0)
         X_idx = torch.tensor(X_idx, dtype=torch.long, device=X.device)
 
         return X, X_idx
-    
+
     def predict(self, tst_index, sub_Ni=None, rep_num=1, flag_trndata=False):
         if sub_Ni is None:
             sub_Ni = self.sub_Ni
@@ -121,40 +113,25 @@ class DGP_RF:
 
         return means_all.numpy(), vars_all.numpy()
 
-
     def model_fit(self, save_path=None):
         iters_Pos = len(self.pos_idx)
         n_pos = int(max(round(self.batch_size / 2), 1))
-        n_neg = n_pos  # Can be tuned
+        n_neg = n_pos
 
         for epoch in trange(self.max_iter, desc="Training Epochs"):
-            eta = 1.0  # can implement schedule later
             total_obj = 0.0
-
             for i in range(iters_Pos):
                 anc_idx = self.pos_idx[i]
-
-                pos_idx = np.random.choice(
-                    np.setdiff1d(self.pos_idx, anc_idx),
-                    min(n_pos, len(self.pos_idx) - 1),
-                    replace=False
-                )
+                pos_idx = np.random.choice(np.setdiff1d(self.pos_idx, anc_idx), min(n_pos, len(self.pos_idx) - 1), replace=False)
                 pos_idx = np.concatenate(([anc_idx], pos_idx))
-
-                neg_idx = np.random.choice(
-                    self.neg_idx,
-                    min(n_neg, len(self.neg_idx)),
-                    replace=False
-                )
-
+                neg_idx = np.random.choice(self.neg_idx, min(n_neg, len(self.neg_idx)), replace=False)
                 index_vec = np.concatenate((pos_idx, neg_idx))
                 set_indices = self.mark_subImgs(self.data_X, index_vec, sub_Ni=self.sub_Ni)
                 X, X_idx = self.gen_input_fromList(self.data_X, index_vec, set_indices[0])
 
                 Y = self.Y[index_vec]
                 Y[0] = -1  # anchor
-
-                total_obj += self.run_optimization(X, X_idx, Y, eta * self.regul_const)
+                total_obj += self.run_optimization(X, X_idx, Y, self.regul_const)
 
             avg_obj = total_obj / iters_Pos
             print(f"Epoch {epoch + 1}/{self.max_iter} - Loss: {avg_obj:.4f}")
@@ -162,6 +139,3 @@ class DGP_RF:
         if save_path:
             torch.save(self.model.state_dict(), save_path)
             print(f"Model saved to {save_path}")
-
-
-    
