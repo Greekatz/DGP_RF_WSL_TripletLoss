@@ -9,7 +9,7 @@ class VBLayer(nn.Module):
                  kernel_initializer=torch.nn.init.xavier_normal_,
                  bias_initializer=torch.nn.init.zeros_,
                  prior_prec=1.0):
-        super(VBLayer, self).__init__()
+        super().__init__()
         self.units = units
         self.d_input = dim_input
         self.is_ReLUoutput = is_ReLUoutput
